@@ -1,0 +1,20 @@
+# Agents / local notes (not committed by design)
+AGENTS.md
+
+# Python / Django
+backend/.env
+backend/.venv/
+backend/media/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+uv.lock
+
+# Node / frontend (owned by another team)
+frontend/node_modules/
+frontend/dist/
+
+# Misc
+.env
+.DS_Store

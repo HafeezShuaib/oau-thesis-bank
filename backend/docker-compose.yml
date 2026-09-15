@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:16
+    container_name: oau_thesis_bank_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oau_thesis_bank
+      POSTGRES_USER: oau
+      POSTGRES_PASSWORD: oau
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oau -d oau_thesis_bank"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: oau_thesis_bank_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: oau
+      MINIO_ROOT_PASSWORD: oau-thesis-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: oau_thesis_bank_minio_init
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "mc alias set local http://minio:9000 oau oau-thesis-secret
+      && mc mb --ignore-existing local/oau-thesis-bank"
+
+  backend:
+    build: .
+    container_name: oau_thesis_bank_backend
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py wait_for_db &&
+             python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/.venv
+      - ./media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      DJANGO_DEBUG: "1"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: oau_thesis_bank
+      POSTGRES_USER: oau
+      POSTGRES_PASSWORD: oau
+      STORAGE_PROVIDER: minio
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_ACCESS_KEY_ID: oau
+      AWS_S3_SECRET_ACCESS_KEY: oau-thesis-secret
+      AWS_STORAGE_BUCKET_NAME: oau-thesis-bank
+      EMAIL_HOST: ""
+      EMAIL_PORT: "1025"
+
+volumes:
+  db_pgdata:
+    name: oau-thesis-bank_oau_thesis_bank_pgdata
+  minio_data:
