@@ -9,7 +9,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 .pytest_cache/
-uv.lock
+# backend/uv.lock is committed — the Dockerfile synced with --frozen requires it.
 
 # Node / frontend (owned by another team)
 frontend/node_modules/
