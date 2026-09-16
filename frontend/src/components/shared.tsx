@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useContext, createContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
+import { useApi } from '../hooks/useApi';
+import { getUnreadMessageCount, getUnreadNotificationCount, NOTIFICATIONS_UPDATED_EVENT } from '../lib/api';
+import { initials } from '../lib/formatters';
+import type { User as ApiUser } from '../types/api';
 import {
   Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
   LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
@@ -29,39 +34,13 @@ export const theme = {
   }
 };
 
-// --- MOCK DATA ---
-
-export const MOCK_THESES = [
-  { id: 't1', title: 'Machine Learning for Crop Yield Prediction in Nigeria', author: 'Adekunle Ojo', dept: 'Agricultural Engineering', year: 2023, abstract: 'This study applies random forest regressors to predict crop yields based on climate and soil data from Osun State.', area: 'AI in Agriculture', supervisor: 'Dr. O. A. Fajemisin', tags: ['Machine Learning', 'Agriculture', 'Predictive Modeling'], status: 'Published' },
-  { id: 't2', title: 'Natural Language Processing for Yoruba Text Classification', author: 'Oluwaseun Adetunji', dept: 'Computer Science', year: 2024, abstract: 'A novel approach to sentiment analysis for the Yoruba language using fine-tuned transformer models.', area: 'Natural Language Processing', supervisor: 'Prof. E. R. Adagunodo', tags: ['NLP', 'Yoruba', 'Transformers'], status: 'Published' },
-  { id: 't3', title: 'Predictive Modelling of Student Academic Performance', author: 'Fatima Ibrahim', dept: 'Education', year: 2022, abstract: 'Using historical student data to identify at-risk students early in their academic journey.', area: 'Educational Data Mining', supervisor: 'Dr. T. O. Awotunde', tags: ['Data Mining', 'Education'], status: 'Published' },
-  { id: 't4', title: 'Deep Learning Approaches for Early Plant Disease Detection', author: 'Chukwudi Eze', dept: 'Computer Science', year: 2024, abstract: 'An evaluation of CNN architectures for detecting cassava mosaic disease from mobile phone imagery.', area: 'Computer Vision', supervisor: 'Dr. A. O. Ojo', tags: ['Computer Vision', 'Agriculture', 'Deep Learning'], status: 'Draft' },
-  { id: 't5', title: 'Economic Impact of Fintech Adoption in Rural Markets', author: 'Ngozi Okoro', dept: 'Economics', year: 2023, abstract: 'An empirical analysis of mobile money penetration and its effect on small business growth in southwestern Nigeria.', area: 'Development Economics', supervisor: 'Prof. M. A. Adebayo', tags: ['Fintech', 'Economics', 'Rural Development'], status: 'Processing' }
-];
-
-export const MOCK_USERS = [
-  { id: 'u1', name: 'Adekunle Ojo', role: 'Alumni', dept: 'Agricultural Engineering', avatar: 'AO' },
-  { id: 'u2', name: 'Dr. O. A. Fajemisin', role: 'Supervisor', dept: 'Agricultural Engineering', avatar: 'OF' },
-  { id: 'u3', name: 'Prof. E. R. Adagunodo', role: 'Faculty', dept: 'Computer Science', avatar: 'EA' }
-];
-
-export const MOCK_MESSAGES = [
-  { id: 'm1', sender: 'Dr. O. A. Fajemisin', text: 'Have you updated the methodology chapter?', time: '10:00 AM', unread: true },
-  { id: 'm2', sender: 'Oluwaseun Adetunji', text: 'I found a great dataset we could use for the NLP task.', time: 'Yesterday', unread: false }
-];
-
 // --- CONTEXT & ROUTING ---
 
-export type UserRole = 'student' | 'researcher' | 'faculty' | 'admin';
-export type AppUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-};
+export type UserRole = ApiUser['role'];
+export type AppUser = ApiUser;
 
 const screenToPath: Record<string, string> = {
-  'screen-index': '/', 'landing': '/', 'login': '/login', 'signup': '/signup', 'password-reset': '/password-reset',
+  'screen-index': '/screen-index', 'landing': '/', 'login': '/login', 'signup': '/signup', 'password-reset': '/password-reset',
   'discover': '/discover', 'search-results': '/search', 'advanced-search': '/search/advanced', 'saved': '/saved',
   'thesis-detail': '/thesis', 'thesis-ai': '/thesis/ai', 'pdf-reader': '/reader', 'thesis-discussion': '/thesis/discussion',
   'research-lineage': '/thesis/lineage', 'upload': '/upload', 'thesis-metadata': '/upload/metadata', 'access-privacy': '/upload/access',
@@ -69,7 +48,7 @@ const screenToPath: Record<string, string> = {
   'access-requests': '/access-requests', 'idea-checker': '/ideas/checker', 'idea-similarity': '/ideas/similarity', 'idea-extension': '/ideas/extension',
   'gap-explorer': '/gaps', 'gap-detail': '/gaps/detail', 'ai-assistant': '/ai-assistant', 'ai-answer': '/ai-assistant/answer',
   'researchers': '/researchers', 'researcher-profile': '/researchers/profile', 'researcher-activity': '/researchers/activity',
-  'collaboration-hub': '/collaboration', 'collab-opportunity': '/collaboration/opportunity', 'mentorship-request': '/mentorship',
+  'collaboration-hub': '/collaboration', 'collab-opportunity': '/collaboration/opportunity', 'collaboration-requests': '/collaboration/requests', 'mentorship-request': '/mentorship', 'profile-setup': '/profile/setup',
   'messages': '/messages', 'conversation': '/messages/conversation', 'notifications': '/notifications', 'personal-analytics': '/analytics',
   'thesis-analytics': '/analytics/thesis', 'university-analytics': '/analytics/university', 'account-settings': '/settings', 'privacy-settings': '/settings/privacy',
   'admin-dashboard': '/admin', 'content-moderation': '/admin/moderation', 'user-management': '/admin/users'
@@ -77,52 +56,49 @@ const screenToPath: Record<string, string> = {
 
 const pathToScreen: Record<string, string> = Object.fromEntries(Object.entries(screenToPath).map(([id, path]) => [path, id]));
 
-export const getScreenFromPath = (path: string) => pathToScreen[path] || (path.startsWith('/admin') ? 'admin-dashboard' : 'landing');
+const getPathname = (path: string) => path.split('?')[0].replace(/\/$/, '') || '/';
+
+export const getScreenFromPath = (path: string) => {
+  const pathname = getPathname(path);
+  return pathToScreen[pathname] || (pathname.startsWith('/admin') ? 'admin-dashboard' : 'landing');
+};
+
+export const getRouteFromLocation = () => {
+  const path = `${window.location.pathname}${window.location.search}`;
+  const params: Record<string, unknown> = Object.fromEntries(new URLSearchParams(window.location.search).entries()) as Record<string, unknown>;
+  return { id: getScreenFromPath(path), params };
+};
 
 export const RouterContext = createContext<any>(null);
 
 export const useAppRouter = () => useContext(RouterContext);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  const initialPath = window.location.pathname.replace(/\/$/, '') || '/';
-  const initialId = getScreenFromPath(initialPath);
-  const [currentScreen, setCurrentScreen] = useState({ id: initialId, params: {} });
-  const [user, setUserState] = useState<AppUser | null>(() => {
-    try {
-      const saved = localStorage.getItem('oau_thesis_user');
-      if (saved) return JSON.parse(saved);
-      // Frontend-only demo access: visiting /admin directly opens the admin
-      // control center so it can be reviewed before the backend auth exists.
-      if (initialPath.startsWith('/admin')) {
-        return { id: 'demo-admin', name: 'OAU Thesis Bank Admin', email: 'admin@oauife.edu.ng', role: 'admin' };
-      }
-      return null;
-    } catch { return null; }
-  });
-
-  const setUser = (nextUser: AppUser | null) => {
-    setUserState(nextUser);
-    if (nextUser) localStorage.setItem('oau_thesis_user', JSON.stringify(nextUser));
-    else localStorage.removeItem('oau_thesis_user');
-  };
+  const { user, isLoading: authLoading, setUser, signOut } = useAuth();
+  const [currentScreen, setCurrentScreen] = useState(getRouteFromLocation);
 
   const navigate = (id: string, params: Record<string, unknown> = {}) => {
     window.scrollTo(0, 0);
     setCurrentScreen({ id, params });
     const path = screenToPath[id] || '/';
-    if (window.location.pathname !== path) window.history.pushState({ id, params }, '', path);
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const nextPath = `${path}${query.toString() ? `?${query}` : ''}`;
+    if (`${window.location.pathname}${window.location.search}` !== nextPath) window.history.pushState({ id, params }, '', nextPath);
   };
 
   useEffect(() => {
-    const onPopState = () => setCurrentScreen({ id: getScreenFromPath(window.location.pathname), params: {} });
+    const onPopState = () => setCurrentScreen(getRouteFromLocation());
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  const logout = () => { setUser(null); navigate('landing'); };
+  const logout = () => { signOut(); navigate('landing'); };
 
   return (
-    <RouterContext.Provider value={{ currentScreen, navigate, user, setUser, logout }}>
+    <RouterContext.Provider value={{ currentScreen, navigate, user, setUser, logout, authLoading }}>
       {children}
     </RouterContext.Provider>
   );
@@ -156,21 +132,25 @@ export const Button = ({ children, variant = 'primary', size = 'md', className =
   );
 };
 
-export const Input = ({ label, type = 'text', placeholder = '', className = '', value = '', onChange = (_e: React.ChangeEvent<HTMLInputElement>) => {}, disabled = false }: {
-  label?: string; type?: string; placeholder?: string; className?: string; value?: string;
-  onChange?: React.ChangeEventHandler<HTMLInputElement>; disabled?: boolean;
-}) => (
-  <div className={`flex flex-col space-y-1.5 ${className}`}>
-    {label && <label className="text-sm font-medium text-slate-700">{label}</label>}
-    <input
-      type={type} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled}
-      className="px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#00502F] focus:border-[#00502F] sm:text-sm text-slate-900 placeholder-slate-400"
-    />
-  </div>
-);
+export const Input = ({ label, id, type = 'text', placeholder = '', className = '', value = '', onChange = (_e: React.ChangeEvent<HTMLInputElement>) => {}, disabled = false, ariaDescribedBy, maxLength }: {
+  label?: string; id?: string; type?: string; placeholder?: string; className?: string; value?: string;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>; disabled?: boolean; ariaDescribedBy?: string; maxLength?: number;
+}) => {
+  const inputId = id || (label ? `input-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : undefined);
+  return (
+    <div className={`flex flex-col space-y-1.5 ${className}`}>
+      {label && <label htmlFor={inputId} className="text-sm font-medium text-slate-700">{label}</label>}
+      <input
+        id={inputId}
+        type={type} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} aria-describedby={ariaDescribedBy} maxLength={maxLength}
+        className="px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-[#00502F] focus:border-[#00502F] sm:text-sm text-slate-900 placeholder-slate-400"
+      />
+    </div>
+  );
+};
 
-export const Card = ({ children, className = '', hover = false, onClick = undefined }) => (
-  <div onClick={onClick} className={`bg-white rounded-lg border ${theme.colors.border} shadow-sm overflow-hidden ${hover ? 'hover:shadow-md transition-shadow cursor-pointer' : ''} ${className}`}>
+export const Card = ({ children, className = '', hover = false, onClick = undefined, onKeyDown = undefined, onDragOver = undefined, onDragLeave = undefined, onDrop = undefined, role = undefined, tabIndex = undefined, ariaLabel = undefined }) => (
+  <div onClick={onClick} onKeyDown={onKeyDown} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} role={role} tabIndex={tabIndex} aria-label={ariaLabel} className={`bg-white rounded-lg border ${theme.colors.border} shadow-sm overflow-hidden ${hover ? 'hover:shadow-md transition-shadow cursor-pointer' : ''} ${className}`}>
     {children}
   </div>
 );
@@ -188,6 +168,17 @@ export const Badge = ({ children, variant = 'gray', className = '' }) => {
     </span>
   );
 };
+
+export const UnreadBadge = ({ count }: { count: number }) => count > 0 ? (
+  <span
+    role="status"
+    aria-live="polite"
+    aria-label={`${count} unread message${count === 1 ? '' : 's'}`}
+    className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-[#00502F] px-1.5 text-[10px] font-bold text-white"
+  >
+    {count > 99 ? '99+' : count}
+  </span>
+) : null;
 
 // --- ANIMATION VARIANTS ---
 
@@ -208,9 +199,9 @@ export const itemVariants = {
 };
 
 export const PublicLayout = ({ children }) => {
-  const { navigate } = useAppRouter();
+  const { navigate, user } = useAppRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const go = (id) => { setMenuOpen(false); navigate(id); };
+  const go = (id, params = {}) => { setMenuOpen(false); navigate(id, params); };
   return (
     <div className={`min-h-screen ${theme.colors.background} font-sans text-slate-900 flex flex-col`}>
       <header className="bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-50">
@@ -227,8 +218,13 @@ export const PublicLayout = ({ children }) => {
               <button onClick={() => go('ai-assistant')} className="text-sm font-medium text-slate-600 hover:text-[#00502F] transition-colors">AI Assistant</button>
             </nav>
             <div className="hidden items-center space-x-2 sm:flex">
-              <Button variant="ghost" onClick={() => go('login')}>Log in</Button>
-              <Button onClick={() => go('signup')}>Sign up</Button>
+              {user ? <>
+                <Button variant="ghost" onClick={() => go('researcher-profile', { userId: user.id })}>Profile</Button>
+                <Button onClick={() => go('discover')}>Open workspace</Button>
+              </> : <>
+                <Button variant="ghost" onClick={() => go('login')}>Log in</Button>
+                <Button onClick={() => go('signup')}>Sign up</Button>
+              </>}
             </div>
             <button aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)} className="flex h-10 w-10 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 sm:hidden">
               {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -241,8 +237,13 @@ export const PublicLayout = ({ children }) => {
                   <button key={id} onClick={() => go(id)} className="rounded-md px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50">{label}</button>
                 ))}
                 <div className="mt-2 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
-                  <Button variant="secondary" onClick={() => go('login')}>Log in</Button>
-                  <Button onClick={() => go('signup')}>Sign up</Button>
+                  {user ? <>
+                    <Button variant="secondary" onClick={() => go('researcher-profile', { userId: user.id })}>Profile</Button>
+                    <Button onClick={() => go('discover')}>Workspace</Button>
+                  </> : <>
+                    <Button variant="secondary" onClick={() => go('login')}>Log in</Button>
+                    <Button onClick={() => go('signup')}>Sign up</Button>
+                  </>}
                 </div>
               </div>
             </div>
@@ -261,9 +262,18 @@ export const PublicLayout = ({ children }) => {
 
 export const AuthenticatedLayout = ({ children, title, admin = false }) => {
   const { navigate, currentScreen, user, logout } = useAppRouter();
+  const [notificationsVersion, setNotificationsVersion] = useState(0);
+  const { data: unreadData } = useApi(user && !admin ? getUnreadNotificationCount : null, [user?.id, admin, notificationsVersion], Boolean(user && !admin));
+  const { data: unreadMessageData } = useApi(user && !admin ? getUnreadMessageCount : null, [user?.id, admin, notificationsVersion], Boolean(user && !admin));
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const userItems = [
+  useEffect(() => {
+    const refreshNotificationCount = () => setNotificationsVersion((version) => version + 1);
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotificationCount);
+    return () => window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refreshNotificationCount);
+  }, []);
+
+  const userItems: Array<{ id: string; label: string; icon: React.ElementType; count?: number }> = [
     { id: 'discover', label: 'Discover Research', icon: SearchIcon },
     { id: 'my-projects', label: 'My Research', icon: FileText },
     { id: 'gap-explorer', label: 'Research Gaps', icon: Grid },
@@ -271,14 +281,14 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
     { id: 'ai-assistant', label: 'AI Assistant', icon: Cpu },
     { id: 'researchers', label: 'Researchers', icon: Users },
     { id: 'collaboration-hub', label: 'Collaboration', icon: GitBranch },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, count: 2 },
-    { id: 'notifications', label: 'Notifications', icon: Bell, count: 3 },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, count: unreadMessageData?.count || 0 },
+    { id: 'notifications', label: 'Notifications', icon: Bell, count: unreadData?.count || 0 },
     { id: 'personal-analytics', label: 'Analytics', icon: BarChart2 },
   ];
 
-  const adminItems = [
+  const adminItems: Array<{ id: string; label: string; icon: React.ElementType; count?: number }> = [
     { id: 'admin-dashboard', label: 'Overview', icon: Home },
-    { id: 'content-moderation', label: 'Content Moderation', icon: ShieldAlert, count: 12 },
+    { id: 'content-moderation', label: 'Content Moderation', icon: ShieldAlert },
     { id: 'user-management', label: 'User Management', icon: Users },
     { id: 'university-analytics', label: 'Research Analytics', icon: BarChart2 },
     { id: 'discover', label: 'Repository', icon: Database },
@@ -286,7 +296,7 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
 
   const items = admin ? adminItems : userItems;
   const active = currentScreen?.id;
-  const go = (id) => { setMobileOpen(false); navigate(id); };
+  const go = (id, params = {}) => { setMobileOpen(false); navigate(id, params); };
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] font-sans text-slate-900 flex">
@@ -343,14 +353,19 @@ export const AuthenticatedLayout = ({ children, title, admin = false }) => {
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             {!admin && user?.role === 'admin' && <button onClick={() => go('admin-dashboard')} title="Open admin portal" className="hidden lg:flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"><Shield className="h-3.5 w-3.5" /> Admin</button>}
-            <button onClick={() => go('notifications')} aria-label="Notifications" className="text-slate-400 hover:text-slate-700 relative h-9 w-9 rounded-lg hover:bg-slate-50 flex items-center justify-center"><Bell className="w-5 h-5" /><span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" /></button>
-            <button onClick={() => go('researcher-profile')} className="h-9 w-9 rounded-full bg-[#00502F] text-white flex items-center justify-center text-xs font-bold ring-2 ring-white shadow-sm" aria-label="Open profile">AO</button>
+            <button onClick={() => go('notifications')} aria-label="Notifications" className="text-slate-400 hover:text-slate-700 relative h-9 w-9 rounded-lg hover:bg-slate-50 flex items-center justify-center"><Bell className="w-5 h-5" />{unreadData?.count ? <span aria-label={`${unreadData.count} unread notification${unreadData.count === 1 ? '' : 's'}`} role="status" aria-live="polite" className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" /> : null}</button>
+            <button onClick={() => go('researcher-profile', user?.id ? { userId: user.id } : {})} className="h-9 w-9 rounded-full bg-[#00502F] text-white flex items-center justify-center text-xs font-bold ring-2 ring-white shadow-sm" aria-label="Open profile">{user?.avatar || initials(user?.name)}</button>
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">{children}</main>
       </div>
     </div>
   );
+};
+
+export const PublicOrAuthenticatedLayout = ({ children, title }: { children: React.ReactNode; title: string }) => {
+  const { user } = useAppRouter();
+  return user ? <AuthenticatedLayout title={title}>{children}</AuthenticatedLayout> : <PublicLayout><div className="px-4 py-8 sm:px-6 lg:px-8">{children}</div></PublicLayout>;
 };
 
 export const AuthContainer = ({ children, title, subtitle }) => (
@@ -368,22 +383,27 @@ export const AuthContainer = ({ children, title, subtitle }) => (
   </div>
 );
 
-export const ThesisCard = ({ thesis, onClick }) => (
-  <Card hover className="p-5 flex flex-col h-full" onClick={onClick}>
-    <div className="flex justify-between items-start mb-2">
-      <Badge variant={thesis.status === 'Published' ? 'green' : 'gray'}>{thesis.status}</Badge>
-      <span className="text-xs text-slate-400 font-medium">{thesis.year}</span>
-    </div>
-    <h3 className="text-lg font-semibold text-slate-900 leading-tight mb-2 line-clamp-2">{thesis.title}</h3>
-    <p className="text-sm text-slate-500 mb-4">{thesis.author} • {thesis.dept}</p>
-    <p className="text-sm text-slate-600 line-clamp-3 mb-4 flex-1">{thesis.abstract}</p>
-    <div className="flex flex-wrap gap-2 mt-auto">
-      {thesis.tags.slice(0, 2).map(tag => (
-        <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">{tag}</span>
-      ))}
-    </div>
-  </Card>
-);
+export const ThesisCard = ({ thesis, onClick }) => {
+  const status = thesis.status || 'published';
+  const department = thesis.department || thesis.dept || 'Department not provided';
+  const tags = Array.isArray(thesis.tags) ? thesis.tags : [];
+  return (
+    <Card hover className="p-5 flex flex-col h-full" onClick={onClick}>
+      <div className="flex justify-between items-start mb-2">
+        <Badge variant={String(status).toLowerCase() === 'published' ? 'green' : 'gray'}>{String(status).replace(/^./, (letter) => letter.toUpperCase())}</Badge>
+        <span className="text-xs text-slate-400 font-medium">{thesis.year || '—'}</span>
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 leading-tight mb-2 line-clamp-2">{thesis.title}</h3>
+      <p className="text-sm text-slate-500 mb-4">{thesis.author} • {department}</p>
+      <p className="text-sm text-slate-600 line-clamp-3 mb-4 flex-1">{thesis.abstract || 'No abstract provided.'}</p>
+      <div className="flex flex-wrap gap-2 mt-auto">
+        {tags.slice(0, 2).map(tag => (
+          <span key={tag} className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">{tag}</span>
+        ))}
+      </div>
+    </Card>
+  );
+};
 
 export const UploadWizardNav = ({ step }) => (
   <div className="flex items-center justify-center space-x-4 mb-10">

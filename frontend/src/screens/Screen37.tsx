@@ -1,56 +1,49 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useMemo, useState } from 'react';
+import { Bell, CheckCircle, MessageSquare, ShieldAlert, Users } from 'lucide-react';
+import { useAppRouter, AuthenticatedLayout, Card, Badge } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { apiErrorMessage, getNotificationSummary, listConversations, listNotifications, markAllNotificationsRead, markNotificationRead, toArray } from '../lib/api';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
+import { formatDateTime } from '../lib/formatters';
+import type { Notification, NotificationType } from '../types/api';
+
+const iconFor = (type: string) => type === 'access_request' ? ShieldAlert : type === 'message' ? MessageSquare : type === 'mentorship' ? Users : CheckCircle;
+const summaryLabels: Array<[NotificationType, string]> = [['message', 'Messages'], ['access_request', 'Access'], ['mentorship', 'Mentorship'], ['collaboration', 'Collaboration'], ['system', 'System']];
 
 const Screen37Notifications = () => {
   const { navigate } = useAppRouter();
-  return (
-    <AuthenticatedLayout title="Notifications">
-      <div className="max-w-3xl mx-auto space-y-4">
-        <div className="flex justify-between items-center mb-6">
-          <div className="space-x-4">
-            <button className="text-sm font-semibold text-[#00502F]">All</button>
-            <button className="text-sm text-slate-500 hover:text-slate-700">Access Requests</button>
-            <button className="text-sm text-slate-500 hover:text-slate-700">System</button>
-          </div>
-          <button className="text-sm text-slate-400 hover:text-slate-600">Mark all as read</button>
-        </div>
+  const { data, loading, error, refetch } = useApi(listNotifications, [], true);
+  const { data: summary, refetch: refetchSummary } = useApi(getNotificationSummary, [], true);
+  const [workingId, setWorkingId] = useState<number | null>(null);
+  const [actionError, setActionError] = useState('');
+  const notifications = useMemo(() => toArray(data || []), [data]);
 
-        {[
-          { icon: ShieldAlert, color: 'text-amber-500', bg: 'bg-amber-50', title: 'New Access Request', text: 'Tunde Bakare requested access to your embargoed thesis.', time: '2 hours ago', action: () => navigate('access-requests'), unread: true },
-          { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50', title: 'Processing Complete', text: 'AI processing for "Machine Learning for Crop Yield" is finished.', time: 'Yesterday', action: () => navigate('thesis-detail'), unread: false },
-          { icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50', title: 'New Comment', text: 'Prof. Adagunodo commented on your methodology section.', time: '2 days ago', action: () => navigate('thesis-discussion'), unread: false }
-        ].map((notif, i) => (
-          <Card key={i} className={`p-4 flex items-start space-x-4 cursor-pointer transition-colors ${notif.unread ? 'bg-slate-50 border-l-4 border-l-[#00502F]' : 'hover:bg-slate-50'}`} onClick={notif.action}>
-            <div className={`p-2 rounded-full ${notif.bg} ${notif.color}`}>
-              <notif.icon className="w-5 h-5"/>
-            </div>
-            <div className="flex-1">
-              <h4 className={`text-sm ${notif.unread ? 'font-bold text-slate-900' : 'font-medium text-slate-800'}`}>{notif.title}</h4>
-              <p className="text-sm text-slate-600 mt-0.5">{notif.text}</p>
-              <span className="text-xs text-slate-400 mt-2 block">{notif.time}</span>
-            </div>
-          </Card>
-        ))}
-      </div>
-    </AuthenticatedLayout>
-  );
+  const destinationFor = (notification: Notification) => {
+    if (notification.notification_type === 'access_request') return ['access-requests', {}] as const;
+    if (notification.notification_type === 'mentorship') return ['collaboration-requests', { tab: 'inbox' }] as const;
+    if (notification.notification_type === 'collaboration') return ['collaboration-hub', {}] as const;
+    return ['notifications', {}] as const;
+  };
+
+  const openNotification = async (notification: Notification) => {
+    setWorkingId(notification.id); setActionError('');
+    try {
+      if (!notification.is_read) await markNotificationRead(notification.id);
+      if (notification.notification_type === 'message' && notification.actor) {
+        const conversations = toArray(await listConversations());
+        const conversation = conversations.find((candidate) => candidate.participants.some((participant) => participant.id === notification.actor));
+        navigate(conversation ? 'conversation' : 'messages', conversation ? { conversationId: conversation.id } : {});
+      } else {
+        const [screen, params] = destinationFor(notification);
+        navigate(screen, params);
+      }
+      await Promise.all([refetch(), refetchSummary()]);
+    } catch (nextError) { setActionError(apiErrorMessage(nextError, 'Unable to open this notification right now. Please try again.')); } finally { setWorkingId(null); }
+  };
+
+  const markAll = async () => { setActionError(''); try { await markAllNotificationsRead(); await Promise.all([refetch(), refetchSummary()]); } catch (nextError) { setActionError(apiErrorMessage(nextError, 'Unable to mark notifications as read right now. Please try again.')); } };
+
+  return <AuthenticatedLayout title="Notifications"><div className="mx-auto max-w-3xl space-y-4"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-2 text-sm font-semibold text-[#00502F]"><Bell className="h-4 w-4" /> All notifications</div><button onClick={() => void markAll()} className="text-sm text-slate-400 hover:text-slate-600">Mark all as read</button></div>{summary && <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">{summaryLabels.map(([type, label]) => <Card key={type} className="p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-bold text-slate-900">{summary[type] || 0}</p></Card>)}</div>}{actionError && <p className="text-sm text-red-600" role="alert">{actionError}</p>}{loading && <LoadingState label="Loading notifications…" />}{error && <ErrorState onRetry={() => void refetch()} />}{!loading && !error && notifications.length === 0 && <EmptyState title="No notifications yet" description="Updates about access, messages, mentorship, and system events will appear here." icon={Bell} />}{!loading && !error && notifications.map((notification) => { const Icon = iconFor(notification.notification_type); const isWorking = workingId === notification.id; return <Card key={notification.id} role="button" tabIndex={0} ariaLabel={notification.notification_type === 'message' ? `Open message notification: ${notification.title}` : notification.title} className={`flex cursor-pointer items-start space-x-4 p-4 transition-colors ${!notification.is_read ? 'border-l-4 border-l-[#00502F] bg-slate-50' : 'hover:bg-slate-50'}`} onClick={() => void openNotification(notification)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void openNotification(notification); } }}><div className={`rounded-full p-2 ${notification.notification_type === 'access_request' ? 'bg-amber-50 text-amber-500' : notification.notification_type === 'message' ? 'bg-blue-50 text-blue-500' : 'bg-emerald-50 text-emerald-500'}`}><Icon className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h4 className={`text-sm ${!notification.is_read ? 'font-bold text-slate-900' : 'font-medium text-slate-800'}`}>{notification.title}</h4>{!notification.is_read && <Badge variant="green">New</Badge>}</div><p className="mt-0.5 text-sm text-slate-600">{notification.message}</p><span className="mt-2 block text-xs text-slate-400">{formatDateTime(notification.created_at)}{isWorking ? ' · Opening…' : ''}</span></div></Card>; })}</div></AuthenticatedLayout>;
 };
 
 export default Screen37Notifications;

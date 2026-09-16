@@ -13,15 +13,21 @@ import {
   BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
+  theme, useAppRouter,
+  Button, Input, Card, Badge, PublicOrAuthenticatedLayout, AuthenticatedLayout, AuthContainer,
   ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
 } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { searchTheses } from '../lib/api';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
 
 const Screen05Discover = () => {
   const { navigate } = useAppRouter();
+  const [query, setQuery] = useState('');
+  const { data, loading, error, refetch } = useApi(() => searchTheses(), [], true);
+  const recent = data?.results.slice(0, 3).map((result) => result.thesis) || [];
   return (
-    <AuthenticatedLayout title="Discover Research">
+    <PublicOrAuthenticatedLayout title="Discover Research">
       <div className="max-w-5xl mx-auto space-y-10">
         {/* Search Hero */}
         <div className="bg-[#00502F] rounded-2xl p-8 md:p-12 text-white shadow-lg relative overflow-hidden">
@@ -31,13 +37,15 @@ const Screen05Discover = () => {
             <div className="flex bg-white rounded-lg p-1 shadow-sm max-w-3xl">
               <div className="flex items-center pl-4 flex-1">
                 <SearchIcon className="w-5 h-5 text-slate-400 mr-2" />
-                <input 
-                  type="text" 
-                  placeholder="E.g., How does machine learning improve crop yields in tropical climates?" 
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') navigate('search-results', { q: query }); }}
+                  placeholder="E.g., How does machine learning improve crop yields in tropical climates?"
                   className="w-full py-3 text-slate-900 outline-none text-sm md:text-base"
                 />
               </div>
-              <Button onClick={() => navigate('search-results')} className="rounded-md">Search</Button>
+              <Button onClick={() => navigate('search-results', { q: query })} className="rounded-md">Search</Button>
             </div>
             <div className="mt-4 flex items-center text-sm text-emerald-100 space-x-4">
               <button className="hover:text-white" onClick={() => navigate('advanced-search')}>Advanced Search</button>
@@ -66,14 +74,17 @@ const Screen05Discover = () => {
         {/* Recent */}
         <div>
           <h3 className="text-xl font-semibold text-slate-800 mb-6">Recently Added</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {MOCK_THESES.slice(0, 3).map(thesis => (
-              <ThesisCard key={thesis.id} thesis={thesis} onClick={() => navigate('thesis-detail')} />
+          {loading && <LoadingState label="Loading recent research…" />}
+          {error && <ErrorState onRetry={() => void refetch()} />}
+          {!loading && !error && recent.length === 0 && <EmptyState title="No published research yet" description="Published public theses will appear here when the repository has records." />}
+          {!loading && !error && recent.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recent.map((thesis) => (
+              <ThesisCard key={thesis.id} thesis={thesis} onClick={() => navigate('thesis-detail', { thesisId: thesis.id })} />
             ))}
-          </div>
+          </div>}
         </div>
       </div>
-    </AuthenticatedLayout>
+    </PublicOrAuthenticatedLayout>
   );
 };
 

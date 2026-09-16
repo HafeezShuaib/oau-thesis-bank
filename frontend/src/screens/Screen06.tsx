@@ -1,91 +1,98 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useEffect, useState } from 'react';
+import { Bookmark, Search as SearchIcon } from 'lucide-react';
+import { useAppRouter, Button, Card, PublicOrAuthenticatedLayout } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { apiErrorMessage, saveThesis, searchTheses, unsaveThesis } from '../lib/api';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
+
+const fieldClassName = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#00502F] focus:outline-none focus:ring-1 focus:ring-[#00502F]';
 
 const Screen06SearchResults = () => {
-  const { navigate } = useAppRouter();
-  return (
-    <AuthenticatedLayout title="Search Results">
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Sidebar Filters */}
-        <div className="w-full md:w-64 flex-shrink-0 space-y-6">
-          <div>
-            <h4 className="font-medium text-sm text-slate-900 mb-3 uppercase tracking-wider">Department</h4>
-            <div className="space-y-2">
-              {['All', 'Computer Science', 'Agriculture', 'Economics'].map(dept => (
-                <label key={dept} className="flex items-center text-sm text-slate-600">
-                  <input type="checkbox" className="mr-2 rounded border-slate-300 text-[#00502F] focus:ring-[#00502F]" defaultChecked={dept === 'All'} /> {dept}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="font-medium text-sm text-slate-900 mb-3 uppercase tracking-wider">Year</h4>
-            <select className="w-full border-slate-300 rounded-md text-sm p-2 bg-white">
-              <option>Any Year</option>
-              <option>2024</option>
-              <option>2023</option>
-            </select>
-          </div>
-        </div>
+  const { navigate, currentScreen, user } = useAppRouter();
+  const routeQuery = String(currentScreen.params?.q || '');
+  const routeDepartment = String(currentScreen.params?.department || '');
+  const routeFaculty = String(currentScreen.params?.faculty || '');
+  const routeYear = String(currentScreen.params?.year || '');
+  const routeTag = String(currentScreen.params?.tag || '');
+  const [draftQuery, setDraftQuery] = useState(routeQuery);
+  const [department, setDepartment] = useState(routeDepartment);
+  const [faculty, setFaculty] = useState(routeFaculty);
+  const [year, setYear] = useState(routeYear);
+  const [tag, setTag] = useState(routeTag);
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [savedIds, setSavedIds] = useState<number[]>([]);
+  const [actionError, setActionError] = useState('');
+  const { data, loading, error, refetch } = useApi(
+    () => searchTheses({ q: routeQuery, department: routeDepartment, faculty: routeFaculty, year: routeYear, tag: routeTag }),
+    [routeQuery, routeDepartment, routeFaculty, routeYear, routeTag],
+    true,
+  );
+  const results = data?.results || [];
 
-        {/* Results */}
-        <div className="flex-1">
-          <div className="mb-6 flex justify-between items-center border-b border-slate-200 pb-4">
-            <p className="text-sm text-slate-600">Showing <strong>24</strong> results for <span className="font-medium text-slate-900">"machine learning agriculture"</span></p>
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="text-slate-500">Sort by:</span>
-              <select className="border-none bg-transparent font-medium text-slate-900 focus:ring-0 cursor-pointer">
-                <option>Relevance</option>
-                <option>Newest</option>
-                <option>Citations</option>
-              </select>
-            </div>
+  useEffect(() => {
+    setDraftQuery(routeQuery);
+    setDepartment(routeDepartment);
+    setFaculty(routeFaculty);
+    setYear(routeYear);
+    setTag(routeTag);
+  }, [routeQuery, routeDepartment, routeFaculty, routeYear, routeTag]);
+
+  const applyFilters = (event: React.FormEvent) => {
+    event.preventDefault();
+    navigate('search-results', { q: draftQuery.trim(), department: department.trim(), faculty: faculty.trim(), year: year.trim(), tag: tag.trim() });
+  };
+
+  const toggleSave = async (event: React.MouseEvent, id: number, currentlySaved: boolean) => {
+    event.stopPropagation();
+    if (!user) { navigate('login'); return; }
+    setSavingId(id);
+    setActionError('');
+    try {
+      if (currentlySaved || savedIds.includes(id)) {
+        await unsaveThesis(id);
+        setSavedIds((ids) => ids.filter((savedId) => savedId !== id));
+      } else {
+        await saveThesis(id);
+        setSavedIds((ids) => [...ids, id]);
+      }
+    } catch (nextError) {
+      setActionError(apiErrorMessage(nextError, 'Unable to update your saved research.'));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <PublicOrAuthenticatedLayout title="Search Results">
+      <div className="flex flex-col gap-8 md:flex-row">
+        <form className="w-full shrink-0 space-y-5 md:w-72" onSubmit={applyFilters}>
+          <div>
+            <h4 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-900">Search repository</h4>
+            <div className="relative"><SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search keywords" value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} placeholder="Keywords" className={`${fieldClassName} pl-9`} /></div>
           </div>
-          
-          <div className="space-y-4">
-            {MOCK_THESES.slice(0, 3).map((thesis, i) => (
-              <Card key={thesis.id} hover className="p-6 flex flex-col md:flex-row gap-6 items-start" onClick={() => navigate('thesis-detail')}>
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="text-xs font-semibold text-[#00502F] bg-emerald-50 px-2 py-0.5 rounded">{i === 0 ? '98% Match' : '85% Match'}</span>
-                    <span className="text-xs text-slate-400">{thesis.year}</span>
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-1">{thesis.title}</h3>
-                  <p className="text-sm text-[#D4AF37] mb-3">{thesis.author} • {thesis.dept}</p>
-                  <p className="text-sm text-slate-600 mb-4">{thesis.abstract}</p>
-                  <div className="flex items-center space-x-3">
-                    {thesis.tags.map(tag => (
-                      <span key={tag} className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="md:w-32 flex flex-col space-y-2">
-                  <Button variant="secondary" className="w-full text-xs" onClick={(e) => { e.stopPropagation(); navigate('pdf-reader'); }}>Read PDF</Button>
-                  <Button variant="ghost" className="w-full text-xs" onClick={(e) => { e.stopPropagation(); navigate('saved'); }}>Save</Button>
-                </div>
-              </Card>
-            ))}
-          </div>
+          <label className="block text-sm font-medium text-slate-700">Department<input value={department} onChange={(event) => setDepartment(event.target.value)} placeholder="Any department" className={`${fieldClassName} mt-1.5`} /></label>
+          <label className="block text-sm font-medium text-slate-700">Faculty<input value={faculty} onChange={(event) => setFaculty(event.target.value)} placeholder="Any faculty" className={`${fieldClassName} mt-1.5`} /></label>
+          <label className="block text-sm font-medium text-slate-700">Year<input value={year} onChange={(event) => setYear(event.target.value)} inputMode="numeric" placeholder="Any year" className={`${fieldClassName} mt-1.5`} /></label>
+          <label className="block text-sm font-medium text-slate-700">Tag<input value={tag} onChange={(event) => setTag(event.target.value)} placeholder="e.g. machine learning" className={`${fieldClassName} mt-1.5`} /></label>
+          <div className="flex gap-2"><Button type="submit" className="flex-1">Apply filters</Button><Button type="button" variant="ghost" onClick={() => { setDraftQuery(''); setDepartment(''); setFaculty(''); setYear(''); setTag(''); navigate('search-results'); }}>Clear</Button></div>
+        </form>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4"><p className="text-sm text-slate-600">Showing <strong>{data?.count ?? 0}</strong> results{routeQuery && <> for <span className="font-medium text-slate-900">“{routeQuery}”</span></>}</p><button className="text-sm font-medium text-[#00502F] hover:text-[#003d24]" onClick={() => navigate('advanced-search')}>Advanced search</button></div>
+          {actionError && <p className="mb-4 text-sm text-red-600" role="alert">{actionError}</p>}
+          {loading && <LoadingState label="Searching the repository…" />}
+          {error && <ErrorState onRetry={() => void refetch()} />}
+          {!loading && !error && results.length === 0 && <EmptyState title="No matching research" description="Try a broader phrase or clear one of the filters." />}
+          {!loading && !error && results.length > 0 && <div className="space-y-4">{results.map(({ thesis, relevance_score, matched_concepts }) => {
+            const currentlySaved = Boolean(thesis.saved || savedIds.includes(thesis.id));
+            return <Card key={thesis.id} hover className="flex flex-col items-start gap-6 p-6 md:flex-row" onClick={() => navigate('thesis-detail', { thesisId: thesis.id })}>
+              <div className="min-w-0 flex-1"><div className="mb-1 flex flex-wrap items-center gap-2">{relevance_score !== null && <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-[#00502F]">{Math.round(relevance_score * 100)}% Match</span>}<span className="text-xs text-slate-400">{thesis.year || 'Year not provided'}</span></div><h3 className="mb-1 text-lg font-bold text-slate-900">{thesis.title}</h3><p className="mb-3 text-sm text-[#D4AF37]">{thesis.author} · {thesis.department || 'Department not provided'}</p><p className="mb-4 text-sm text-slate-600">{thesis.abstract || 'No abstract provided.'}</p><div className="flex flex-wrap items-center gap-2">{(matched_concepts.length ? matched_concepts : thesis.tags).map((tagValue) => <span key={tagValue} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">{tagValue}</span>)}</div></div>
+              <div className="flex w-full shrink-0 flex-col gap-2 md:w-32"><Button variant="secondary" className="w-full text-xs" onClick={(event) => { event.stopPropagation(); navigate('pdf-reader', { thesisId: thesis.id }); }}>Read PDF</Button><Button variant="ghost" disabled={savingId === thesis.id} className="w-full text-xs" onClick={(event) => void toggleSave(event, thesis.id, currentlySaved)}><Bookmark className={`mr-1 h-3.5 w-3.5 ${currentlySaved ? 'fill-current' : ''}`} /> {currentlySaved ? 'Saved' : 'Save'}</Button></div>
+            </Card>;
+          })}</div>}
         </div>
       </div>
-    </AuthenticatedLayout>
+    </PublicOrAuthenticatedLayout>
   );
 };
 

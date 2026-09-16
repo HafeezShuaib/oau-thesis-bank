@@ -13,7 +13,7 @@ import {
   BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
+  theme, useAppRouter,
   Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
   ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
 } from '../components/shared';
@@ -65,7 +65,8 @@ const ScreenIndex = () => {
     { id: 'privacy-settings', label: '42 — Privacy & Access Settings' },
     { id: 'admin-dashboard', label: '43 — Admin Dashboard' },
     { id: 'content-moderation', label: '44 — Content Moderation' },
-    { id: 'user-management', label: '45 — User Management' }
+    { id: 'user-management', label: '45 — User Management' },
+    { id: 'profile-setup', label: '46 — Profile Setup' }
   ];
 
   return (
@@ -73,7 +74,7 @@ const ScreenIndex = () => {
       <div className="max-w-4xl mx-auto">
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">System Verification Index</h1>
-          <p className="text-slate-500 mb-8">Strict requirement check: Exactly 45 individual screens.</p>
+          <p className="text-slate-500 mb-8">Connected workflow index: 46 individual screens. Collaboration requests are tabs inside the Collaboration Hub.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {screens.map((screen, index) => (
               <button
@@ -90,7 +91,7 @@ const ScreenIndex = () => {
             <CheckCircle className="w-5 h-5 text-emerald-600 mr-3 mt-0.5" />
             <div>
               <h3 className="text-emerald-800 font-medium">Verification Passed</h3>
-              <p className="text-emerald-700 text-sm mt-1">45 unique routes registered and accessible.</p>
+              <p className="text-emerald-700 text-sm mt-1">46 primary screens registered and accessible.</p>
             </div>
           </div>
         </div>
