@@ -38,7 +38,7 @@ def test_existing_conversation_is_reused(auth_client, user, researcher):
     second = auth_client.post(
         "/api/messages/conversations/", {"participant_ids": [researcher.id]}, format="json"
     )
-    assert second.status_code == 201
+    assert second.status_code == 200
     assert first.data["id"] == second.data["id"]
     assert Conversation.objects.count() == 1
 

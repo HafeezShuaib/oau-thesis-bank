@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from notifications.services import notify
+from admin_panel.services import log_event
 
 from .models import CollaborationOpportunity, MentorshipRequest
 from .serializers import (
@@ -86,6 +87,13 @@ class MentorshipRequestViewSet(
             raise PermissionDenied("Only the mentor can review this request.")
         req.status = status
         req.save(update_fields=["status"])
+        log_event(
+            actor=request.user,
+            action="mentorship.reviewed",
+            subject_type="mentorship_request",
+            subject_id=req.id,
+            detail=f"{status} mentorship request from {req.mentee.display_name}",
+        )
         if status == "approved":
             notify(
                 recipient=req.mentee,

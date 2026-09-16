@@ -45,7 +45,7 @@ class MentorshipRequestSerializer(serializers.ModelSerializer):
         write_only=True,
         queryset=User.objects.all(),
         source="mentor",
-        required=False,
+        required=True,
     )
 
     class Meta:

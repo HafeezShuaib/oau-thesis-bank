@@ -1,4 +1,5 @@
 import pytest
+from django.core.files.base import ContentFile
 from rest_framework.test import APIClient
 
 from notifications.models import Notification
@@ -33,6 +34,40 @@ def test_owner_view_does_not_count(researcher, make_thesis):
     _client_for(researcher).get(f"/api/theses/{thesis.id}/")
     thesis.refresh_from_db()
     assert thesis.views == 0
+
+
+def test_anonymous_download_counts(api_client, researcher, make_thesis):
+    thesis = make_thesis(owner=researcher, title="Counted Downloads")
+    thesis.file.save("impact.pdf", ContentFile(b"%PDF-1.4 test"))
+    api_client.get(f"/api/theses/{thesis.id}/download/")
+    thesis.refresh_from_db()
+    assert thesis.downloads == 1
+
+
+def test_owner_download_does_not_count(researcher, make_thesis):
+    thesis = make_thesis(owner=researcher, title="Owner Download")
+    thesis.file.save("impact.pdf", ContentFile(b"%PDF-1.4 test"))
+    _client_for(researcher).get(f"/api/theses/{thesis.id}/download/")
+    thesis.refresh_from_db()
+    assert thesis.downloads == 0
+
+
+def test_other_user_download_counts(researcher, student, make_thesis):
+    thesis = make_thesis(owner=researcher, title="Peer Download")
+    thesis.file.save("impact.pdf", ContentFile(b"%PDF-1.4 test"))
+    _client_for(student).get(f"/api/theses/{thesis.id}/download/")
+    thesis.refresh_from_db()
+    assert thesis.downloads == 1
+
+
+def test_download_endpoint_returns_pdf_and_counts_once(researcher, student, make_thesis):
+    thesis = make_thesis(owner=researcher, title="Twice Downloaded")
+    thesis.file.save("impact.pdf", ContentFile(b"%PDF-1.4 test"))
+    response = _client_for(student).get(f"/api/theses/{thesis.id}/download/")
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("application/pdf")
+    thesis.refresh_from_db()
+    assert thesis.downloads == 1
 
 
 def test_access_request_notifies_owner(researcher, student, make_thesis):

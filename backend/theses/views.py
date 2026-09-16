@@ -7,6 +7,9 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 
 from accounts.permissions import IsActiveUser
+from admin_panel.models import ModerationItem
+from admin_panel.serializers import ModerationItemSerializer
+from admin_panel.services import log_event
 from notifications.models import Notification
 from notifications.services import notify
 
@@ -51,6 +54,7 @@ class ThesisViewSet(viewsets.ModelViewSet):
             "download",
             "save",
             "unsave",
+            "flag",
         ):
             qs = Thesis.objects.select_related("owner").prefetch_related("tags")
             return qs.prefetch_related("access_requests")
@@ -59,6 +63,16 @@ class ThesisViewSet(viewsets.ModelViewSet):
             Thesis.objects.select_related("owner")
             .prefetch_related("tags")
             .filter(status=Thesis.Status.PUBLISHED, access_policy=Thesis.AccessPolicy.PUBLIC)
+        )
+
+    def perform_create(self, serializer):
+        thesis = serializer.save()
+        log_event(
+            actor=self.request.user,
+            action="thesis.uploaded",
+            subject_type="thesis",
+            subject_id=thesis.id,
+            detail=f"'{thesis.title}' (status={thesis.status})",
         )
 
     def retrieve(self, request, *args, **kwargs):
@@ -110,6 +124,40 @@ class ThesisViewSet(viewsets.ModelViewSet):
         return Response({"saved": True, "created": created})
 
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
+    def flag(self, request, id=None):
+        thesis = self.get_object()
+        if thesis.owner_id == request.user.id:
+            return Response({"detail": "You cannot flag your own thesis."}, status=status.HTTP_400_BAD_REQUEST)
+        flag_type = (request.data.get("flag_type") or "").strip()
+        if flag_type not in ModerationItem.FlagType.values:
+            return Response(
+                {"detail": "flag_type must be one of: high_similarity, standard_review, metadata."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ModerationItem.objects.filter(
+            thesis=thesis, status=ModerationItem.Status.PENDING
+        ).exists():
+            return Response(
+                {"detail": "This thesis already has a pending moderation flag."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item = ModerationItem.objects.create(
+            thesis=thesis,
+            flag_type=flag_type,
+            similarity_score=request.data.get("similarity_score"),
+            note=request.data.get("note", ""),
+            reporter=request.user,
+        )
+        log_event(
+            actor=request.user,
+            action="moderation.flagged",
+            subject_type="moderation_item",
+            subject_id=item.id,
+            detail=f"flagged '{thesis.title}' as {flag_type}",
+        )
+        return Response(ModerationItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated, IsActiveUser])
     def unsave(self, request, id=None):
         thesis = self.get_object()
         SavedThesis.objects.filter(user=request.user, thesis=thesis).delete()
@@ -134,6 +182,8 @@ class ThesisViewSet(viewsets.ModelViewSet):
             return Response({"detail": "You do not have access to this thesis."}, status=status.HTTP_403_FORBIDDEN)
         if not thesis.file:
             return Response({"detail": "No file uploaded for this thesis."}, status=status.HTTP_404_NOT_FOUND)
+        if not request.user.is_authenticated or request.user.id != thesis.owner_id:
+            Thesis.objects.filter(pk=thesis.pk).update(downloads=F("downloads") + 1)
         return FileResponse(thesis.file.open("rb"), as_attachment=True, filename=f"{thesis.slug}.pdf")
 
 
@@ -173,6 +223,13 @@ class AccessRequestViewSet(viewsets.ModelViewSet):
             )
         access_request.status = AccessRequest.Status.APPROVED if decision == "approved" else AccessRequest.Status.DENIED
         access_request.save()
+        log_event(
+            actor=request.user,
+            action="access_request.reviewed",
+            subject_type="access_request",
+            subject_id=access_request.id,
+            detail=f"{decision} request on '{access_request.thesis.title}'",
+        )
         notify(
             recipient=access_request.requester,
             actor=request.user,

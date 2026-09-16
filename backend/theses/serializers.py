@@ -51,12 +51,14 @@ class ThesisSerializer(serializers.ModelSerializer):
             "access_policy",
             "file",
             "processing_status",
+            "views",
+            "downloads",
             "created_at",
             "updated_at",
             "saved",
             "access_requests_count",
         )
-        read_only_fields = ("created_at", "updated_at", "processing_status")
+        read_only_fields = ("created_at", "updated_at", "processing_status", "views", "downloads")
 
     def get_saved(self, obj):
         request = self.context.get("request")

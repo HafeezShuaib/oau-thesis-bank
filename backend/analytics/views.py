@@ -35,6 +35,7 @@ class OverviewView(APIView):
             "draft_theses": Thesis.objects.filter(status=Thesis.Status.DRAFT).count(),
             "restricted_theses": Thesis.objects.filter(access_policy=Thesis.AccessPolicy.RESTRICTED).count(),
             "total_views": published.aggregate(total=Sum("views"))["total"] or 0,
+            "total_downloads": published.aggregate(total=Sum("downloads"))["total"] or 0,
             "total_saves": SavedThesis.objects.count(),
             "active_users": User.objects.filter(status=User.Status.ACTIVE).count(),
         }
@@ -47,12 +48,12 @@ class TopThesesView(APIView):
 
     def get(self, request):
         metric = request.query_params.get("metric", "views")
-        field = {"views": "-views", "saves": "-save_count"}[metric]
+        field = {"views": "-views", "downloads": "-downloads", "saves": "-save_count"}[metric]
         theses = (
             Thesis.objects.filter(status=Thesis.Status.PUBLISHED)
             .annotate(save_count=Count("saved_by"))
             .order_by(field)[:10]
-            .values("id", "title", "author", "department", "faculty", "views", "save_count")
+            .values("id", "title", "author", "department", "faculty", "views", "downloads", "save_count")
         )
         return Response(list(theses))
 
@@ -73,6 +74,7 @@ class BreakdownView(APIView):
             .annotate(
                 count=Count("id"),
                 views=Sum("views"),
+                downloads=Sum("downloads"),
                 saves=Count("saved_by"),
             )
             .order_by("-count")
@@ -95,6 +97,7 @@ class ViewsTrendView(APIView):
             .annotate(
                 theses=Count("id"),
                 views=Sum("views"),
+                downloads=Sum("downloads"),
                 saves=Count("saved_by"),
             )
             .order_by("-month")[:months]
@@ -105,6 +108,7 @@ class ViewsTrendView(APIView):
                     "month": item["month"].isoformat() if item["month"] else None,
                     "theses": item["theses"],
                     "views": item["views"] or 0,
+                    "downloads": item["downloads"] or 0,
                     "saves": item["saves"],
                 }
                 for item in trend

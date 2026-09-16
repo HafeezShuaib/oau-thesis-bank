@@ -97,3 +97,56 @@ def test_suspended_user_cannot_authenticate_actions(make_user):
     assert login.status_code == 200  # token still issues, but permission layer blocks actions
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
     assert client.get("/api/theses/").status_code == 403
+
+
+def test_password_reset_unknown_email_no_leak(api_client):
+    response = api_client.post("/api/auth/password-reset/", {"email": "nobody@oauife.edu.ng"}, format="json")
+    assert response.status_code == 200
+    assert "sent" in response.data["detail"]
+
+
+@pytest.mark.django_db
+def test_password_reset_and_confirm(api_client, user, settings):
+    from django.test import override_settings
+
+    with override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"):
+        response = api_client.post("/api/auth/password-reset/", {"email": user.email}, format="json")
+        assert response.status_code == 200
+
+        from django.core import mail
+
+        assert len(mail.outbox) == 1
+        token = next(line.split("Reset token: ")[1] for line in mail.outbox[0].body.splitlines() if "Reset token: " in line)
+
+        confirm = api_client.post(
+            "/api/auth/password-reset/confirm/",
+            {"token": token, "new_password": "reset-pass-123"},
+            format="json",
+        )
+        assert confirm.status_code == 200
+        user.refresh_from_db()
+        assert user.check_password("reset-pass-123")
+
+        # old password no longer works, new one does
+        assert api_client.post("/api/auth/login/", {"email": user.email, "password": "test-password-123"}, format="json").status_code == 401
+        assert api_client.post("/api/auth/login/", {"email": user.email, "password": "reset-pass-123"}, format="json").status_code == 200
+
+
+def test_password_reset_confirm_rejects_bad_token(api_client, user):
+    response = api_client.post(
+        "/api/auth/password-reset/confirm/",
+        {"token": "not-a-real-token", "new_password": "reset-pass-123"},
+        format="json",
+    )
+    assert response.status_code == 400
+    user.refresh_from_db()
+    assert user.check_password("test-password-123")
+
+
+def test_password_reset_confirm_requires_min_password(api_client):
+    response = api_client.post(
+        "/api/auth/password-reset/confirm/",
+        {"token": "whatever", "new_password": "short"},
+        format="json",
+    )
+    assert response.status_code == 400

@@ -1,10 +1,11 @@
 from django.utils import timezone
-from rest_framework import mixins, permissions, viewsets
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from notifications.services import notify
+from admin_panel.services import log_event
 
 from .models import Conversation, ConversationParticipant, Message
 from .serializers import ConversationDetailSerializer, ConversationSerializer, MessageSerializer
@@ -41,6 +42,17 @@ class ConversationViewSet(
     def perform_create(self, serializer):
         serializer.save()
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK if serializer.conversation_existed else status.HTTP_201_CREATED,
+            headers=headers,
+        )
+
     @action(detail=True, methods=["post"])
     def reply(self, request, pk=None):
         conversation = self.get_object()
@@ -48,6 +60,13 @@ class ConversationViewSet(
         if not body:
             raise ValidationError({"body": "Message body is required."})
         message = Message.objects.create(conversation=conversation, sender=request.user, body=body)
+        log_event(
+            actor=request.user,
+            action="message.replied",
+            subject_type="conversation",
+            subject_id=conversation.id,
+            detail=f"message to {conversation.participants.exclude(id=request.user.id).first().display_name}",
+        )
         for participant in conversation.participants.exclude(id=request.user.id):
             notify(
                 recipient=participant,

@@ -60,6 +60,7 @@ class Thesis(models.Model):
     tags_text = models.TextField(blank=True, default="")
     search_vector = SearchVectorField(null=True, editable=False)
     views = models.PositiveIntegerField(default=0, editable=False)
+    downloads = models.PositiveIntegerField(default=0, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

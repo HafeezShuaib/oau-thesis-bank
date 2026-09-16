@@ -63,6 +63,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         for conv in existing.distinct():
             member_ids = sorted(conv.participants.values_list("id", flat=True))
             if member_ids == others_ids:
+                self.conversation_existed = True
                 return conv
         conversation = Conversation.objects.create()
         ConversationParticipant.objects.bulk_create(
@@ -71,6 +72,7 @@ class ConversationSerializer(serializers.ModelSerializer):
                 ConversationParticipant(conversation=conversation, user=others[0]),
             ]
         )
+        self.conversation_existed = False
         return conversation
 
 
