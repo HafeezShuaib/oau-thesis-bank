@@ -1,87 +1,39 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, MoreVertical, RefreshCw, Send } from 'lucide-react';
+import { useAppRouter, Button, AuthenticatedLayout, UnreadBadge } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { apiErrorMessage, getConversation, listConversations, replyToConversation, toArray } from '../lib/api';
+import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState';
+import { formatDateTime, initials } from '../lib/formatters';
+import { useAuth } from '../context/AuthContext';
 
 const Screen36Conversation = () => {
-  const { navigate } = useAppRouter();
-  return (
-    <AuthenticatedLayout title="Messages">
-       <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex h-[75vh] overflow-hidden">
-        {/* List (Hidden on mobile when in convo) */}
-        <div className="hidden lg:flex w-1/3 border-r border-slate-200 flex-col">
-           {MOCK_MESSAGES.map((msg, i) => (
-              <div key={msg.id} className={`p-4 border-b border-slate-100 cursor-pointer ${i===0 ? 'bg-emerald-50/50 border-l-4 border-l-[#00502F]' : 'hover:bg-slate-50'}`}>
-                <div className="flex justify-between items-baseline mb-1">
-                  <h4 className="text-sm font-semibold text-slate-900">{msg.sender}</h4>
-                </div>
-                <p className="text-sm truncate text-slate-500">{msg.text}</p>
-              </div>
-            ))}
-        </div>
+  const { navigate, currentScreen } = useAppRouter();
+  const { user } = useAuth();
+  const conversationId = Number(currentScreen.params?.conversationId || currentScreen.params?.id);
+  const { data: conversationList, refetch: refetchConversationList } = useApi(listConversations, [], true);
+  const { data: conversation, loading, error, refetch } = useApi(() => conversationId ? getConversation(conversationId) : Promise.resolve(null), [conversationId], true);
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState('');
 
-        {/* Active Convo */}
-        <div className="flex-1 flex flex-col w-full">
-          <div className="p-4 border-b border-slate-200 flex items-center bg-white">
-            <button className="lg:hidden mr-3 text-slate-500" onClick={() => navigate('messages')}><ArrowLeft className="w-5 h-5"/></button>
-            <div className="w-8 h-8 rounded-full bg-slate-200 flex justify-center items-center font-bold text-slate-600 mr-3">OF</div>
-            <div>
-              <h3 className="font-semibold text-slate-900 text-sm">Dr. O. A. Fajemisin</h3>
-              <p className="text-xs text-slate-500">Supervisor</p>
-            </div>
-            <div className="ml-auto">
-              <button className="p-2 text-slate-400 hover:text-slate-600"><MoreVertical className="w-4 h-4"/></button>
-            </div>
-          </div>
+  useEffect(() => {
+    if (!conversationId) return undefined;
+    const timer = window.setInterval(() => { void Promise.all([refetch(), refetchConversationList()]); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [conversationId, refetch, refetchConversationList]);
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-            <div className="text-center text-xs text-slate-400 my-4">Today</div>
-            
-            <div className="flex items-start max-w-[80%]">
-              <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0 mr-2 mt-1"></div>
-              <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-sm text-sm text-slate-800 shadow-sm">
-                Adekunle, have you updated the methodology chapter based on our last meeting? I need to review it before the departmental defense.
-                <span className="block text-[10px] text-slate-400 mt-1 text-right">10:00 AM</span>
-              </div>
-            </div>
+  const send = async () => {
+    if (!body.trim() || !conversation) return;
+    setSending(true); setActionError('');
+    try { await replyToConversation(conversation.id, body.trim()); setBody(''); await Promise.all([refetch(), refetchConversationList()]); } catch (nextError) { setActionError(apiErrorMessage(nextError, 'Unable to send this message.')); } finally { setSending(false); }
+  };
 
-            <div className="flex items-start justify-end w-full">
-              <div className="bg-[#00502F] text-white p-3 rounded-2xl rounded-tr-sm text-sm shadow-sm max-w-[80%]">
-                Yes sir. I just uploaded the new draft to the repository. I expanded the section on Random Forest hyperparameters as you suggested.
-                <div className="mt-2 p-2 bg-[#003d24] rounded flex items-center cursor-pointer" onClick={() => navigate('thesis-detail')}>
-                  <FileText className="w-4 h-4 mr-2"/> <span className="text-xs underline">View Thesis Draft</span>
-                </div>
-                <span className="block text-[10px] text-emerald-200 mt-1 text-right">10:15 AM</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 bg-white border-t border-slate-200">
-            <div className="flex items-center space-x-2">
-              <button className="p-2 text-slate-400 hover:text-slate-600"><LinkIcon className="w-5 h-5"/></button>
-              <input type="text" placeholder="Type a message..." className="flex-1 py-2 px-4 bg-slate-100 rounded-full text-sm outline-none focus:ring-1 focus:ring-[#00502F]"/>
-              <button className="p-2 bg-[#00502F] text-white rounded-full hover:bg-[#003d24]"><Send className="w-4 h-4"/></button>
-            </div>
-          </div>
-        </div>
-       </div>
-    </AuthenticatedLayout>
-  );
+  if (!conversationId) return <AuthenticatedLayout title="Messages"><EmptyState title="No conversation selected" description="Choose a conversation from your inbox." /></AuthenticatedLayout>;
+  if (loading && !conversation) return <AuthenticatedLayout title="Messages"><LoadingState label="Loading conversation…" /></AuthenticatedLayout>;
+  if (error || !conversation) return <AuthenticatedLayout title="Messages"><ErrorState message={apiErrorMessage(error, 'Unable to load this conversation.')} onRetry={() => void refetch()} /></AuthenticatedLayout>;
+  const other = conversation.participants.find((participant) => participant.id !== user?.id) || conversation.participants[0];
+  return <AuthenticatedLayout title="Messages"><div className="flex h-[75vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><div className="hidden w-1/3 flex-col border-r border-slate-200 lg:flex">{toArray(conversationList || []).map((item) => { const participant = item.participants.find((candidate) => candidate.id !== user?.id) || item.participants[0]; const name = participant?.name || participant?.display_name || participant?.email || 'Conversation'; const unread = item.id === conversation.id ? 0 : (item.unread_count || 0); return <button key={item.id} aria-label={`Open conversation with ${name}`} className={`cursor-pointer border-b border-slate-100 p-4 text-left ${item.id === conversation.id ? 'border-l-4 border-l-[#00502F] bg-emerald-50/50' : 'hover:bg-slate-50'}`} onClick={() => navigate('conversation', { conversationId: item.id })}><div className="flex items-center justify-between gap-2"><h4 className={`truncate text-sm ${unread ? 'font-bold text-slate-900' : 'font-semibold text-slate-900'}`}>{name}</h4><UnreadBadge count={unread} /></div><p className={`truncate text-sm ${unread ? 'font-medium text-slate-700' : 'text-slate-500'}`}>{item.last_message?.body || 'No messages yet.'}</p></button>; })}</div><div className="flex w-full flex-1 flex-col"><div className="flex items-center border-b border-slate-200 bg-white p-4"><button aria-label="Back to messages" className="mr-3 text-slate-500 lg:hidden" onClick={() => navigate('messages')}><ArrowLeft className="h-5 w-5" /></button><div className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#00502F] text-xs font-bold text-white">{other?.avatar || initials(other?.name || other?.display_name || other?.email)}</div><div><h3 className="text-sm font-semibold text-slate-900">{other?.name || other?.display_name || other?.email}</h3><p className="text-xs text-slate-500">{other?.role || 'Researcher'}</p></div><div className="ml-auto flex items-center gap-1"><button aria-label="Refresh conversation" className="rounded-md p-2 text-slate-400 hover:bg-slate-50 hover:text-[#00502F]" onClick={() => void Promise.all([refetch(), refetchConversationList()])}><RefreshCw className="h-4 w-4" /></button><button aria-label="Conversation options" className="rounded-md p-2 text-slate-400 hover:text-slate-600"><MoreVertical className="h-4 w-4" /></button></div></div>{actionError && <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700" role="alert">{actionError}</p>}<div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-4">{(conversation.messages || []).length === 0 && <p className="py-12 text-center text-sm text-slate-400">No messages yet. Start the conversation below.</p>}{(conversation.messages || []).map((message) => { const mine = message.sender.id === user?.id; return <div key={message.id} className={`flex items-start ${mine ? 'justify-end' : 'max-w-[80%]'}`}><div className={`${mine ? 'rounded-tr-sm bg-[#00502F] text-white' : 'rounded-tl-sm border border-slate-200 bg-white text-slate-800'} max-w-[80%] rounded-2xl p-3 text-sm shadow-sm`}>{message.body}<span className={`mt-1 block text-right text-[10px] ${mine ? 'text-emerald-200' : 'text-slate-400'}`}>{formatDateTime(message.created_at)}</span></div></div>; })}</div><div className="border-t border-slate-200 bg-white p-4"><div className="flex items-center space-x-2"><input value={body} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} type="text" placeholder="Type a message…" aria-label="Type a message" className="flex-1 rounded-full bg-slate-100 px-4 py-2 text-sm outline-none focus:ring-1 focus:ring-[#00502F]" /><Button disabled={sending || !body.trim()} onClick={() => void send()} aria-label="Send message" className="rounded-full p-2"><Send className="h-4 w-4" /></Button></div></div></div></div></AuthenticatedLayout>;
 };
 
 export default Screen36Conversation;

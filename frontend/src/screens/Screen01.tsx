@@ -5,7 +5,10 @@ import {
   Database, GitBranch, Lightbulb, ShieldCheck, Sparkles, GraduationCap,
   Quote, Menu, X, TrendingUp, LockKeyhole, Upload, Compass
 } from 'lucide-react';
-import { useAppRouter, Button, PublicLayout, Badge, MOCK_THESES } from '../components/shared';
+import { useAppRouter, Button, PublicLayout, Badge } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { searchTheses } from '../lib/api';
+import { LoadingState, ErrorState, EmptyState } from '../components/AsyncState';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 28 },
@@ -19,17 +22,20 @@ const stagger = {
 
 const Screen01Landing = () => {
   const { navigate } = useAppRouter();
+  const { data: searchResponse, loading, error, refetch } = useApi(() => searchTheses(), [], true);
+  const liveTheses = searchResponse?.results.slice(0, 3) || [];
+  const [searchQuery, setSearchQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const go = (id: string) => {
+  const go = (id: string, params: Record<string, unknown> = {}) => {
     setMobileOpen(false);
-    navigate(id);
+    navigate(id, params);
   };
 
   const stats = [
-    { value: '12,000+', label: 'Research projects', icon: Database },
-    { value: '40+', label: 'Academic disciplines', icon: GraduationCap },
-    { value: '2,500+', label: 'Researchers & alumni', icon: Users },
+    { value: searchResponse ? `${searchResponse.count}` : '—', label: 'Published public projects', icon: Database },
+    { value: 'OAU', label: 'University research archive', icon: GraduationCap },
+    { value: 'Live', label: 'Connected repository', icon: Users },
     { value: '24/7', label: 'Research discovery', icon: Compass }
   ];
 
@@ -79,12 +85,12 @@ const Screen01Landing = () => {
   ];
 
   const disciplines = [
-    ['Computer Science', '1,842 projects'],
-    ['Engineering', '2,106 projects'],
-    ['Agriculture', '1,237 projects'],
-    ['Social Sciences', '2,894 projects'],
-    ['Education', '1,521 projects'],
-    ['Health Sciences', '1,936 projects']
+    ['Computer Science', 'Browse live research'],
+    ['Engineering', 'Browse live research'],
+    ['Agriculture', 'Browse live research'],
+    ['Social Sciences', 'Browse live research'],
+    ['Education', 'Browse live research'],
+    ['Health Sciences', 'Browse live research']
   ];
 
   return (
@@ -156,22 +162,25 @@ const Screen01Landing = () => {
                       <span className="hidden text-xs text-slate-400 sm:block">Repository</span>
                     </div>
 
-                    <div className="mt-5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                    <form className="mt-5 rounded-xl border border-slate-200 bg-white p-2 shadow-sm" onSubmit={(event) => { event.preventDefault(); go('search-results', { q: searchQuery.trim() }); }}>
                       <div className="flex items-center">
-                        <Search className="ml-2 h-5 w-5 text-slate-400" />
-                        <span className="flex-1 px-3 py-2 text-sm text-slate-500">Try “machine learning agriculture”</span>
-                        <button onClick={() => go('search-results')} className="rounded-lg bg-[#00502F] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#003d24]">Search</button>
+                        <Search className="ml-2 h-5 w-5 shrink-0 text-slate-400" />
+                        <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} aria-label="Search the repository" placeholder="Try “machine learning agriculture”" className="min-w-0 flex-1 px-3 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400" />
+                        <button type="submit" className="rounded-lg bg-[#00502F] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#003d24]">Search</button>
                       </div>
-                    </div>
+                    </form>
 
                     <div className="mt-5 grid gap-3">
-                      {MOCK_THESES.slice(0, 3).map((thesis, index) => (
+                      {loading && <p className="px-3 py-4 text-sm text-slate-500">Loading repository…</p>}
+                      {error && <button onClick={() => void refetch()} className="px-3 py-4 text-left text-sm text-red-600 hover:underline">Unable to reach the backend. Try again.</button>}
+                      {!loading && !error && liveTheses.length === 0 && <p className="px-3 py-4 text-sm text-slate-500">No published research yet.</p>}
+                      {liveTheses.map(({ thesis }, index) => (
                         <motion.button
                           key={thesis.id}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.5 + index * 0.1 }}
-                          onClick={() => go('thesis-detail')}
+                          onClick={() => go('thesis-detail', { thesisId: thesis.id })}
                           className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#00502F]/30 hover:shadow-md"
                         >
                           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#00502F]/[0.07] text-[#00502F]">
@@ -179,7 +188,7 @@ const Screen01Landing = () => {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="line-clamp-1 text-sm font-semibold text-slate-800 group-hover:text-[#00502F]">{thesis.title}</p>
-                            <p className="mt-1 text-xs text-slate-500">{thesis.dept} · {thesis.year}</p>
+                            <p className="mt-1 text-xs text-slate-500">{thesis.department} · {thesis.year || 'Year not provided'}</p>
                           </div>
                           <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300 group-hover:text-[#00502F]" />
                         </motion.button>

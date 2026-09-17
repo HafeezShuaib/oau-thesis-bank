@@ -1,66 +1,93 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useState } from 'react';
+import { CheckCircle2, Link as LinkIcon, Loader2, Shield } from 'lucide-react';
+import { useAppRouter, Button, Card, AuthenticatedLayout, Input } from '../components/shared';
+import { useAuth } from '../context/AuthContext';
+import { useApi } from '../hooks/useApi';
+import { ApiError, changePassword, getMyProfile, getProviderLink, updateMyProfile } from '../lib/api';
+import { ErrorState, LoadingState } from '../components/AsyncState';
+import { normalizeResearchInterests } from '../lib/formatters';
+import ResearcherProfileForm, { ResearcherProfileFormValues } from '../components/ResearcherProfileForm';
+import type { ProviderName, ProviderStatus } from '../types/api';
+
+const providerLabels: Record<ProviderName, string> = { github: 'GitHub', orcid: 'ORCID' };
 
 const Screen41AccountSettings = () => {
   const { navigate } = useAppRouter();
+  const { user, updateUser } = useAuth();
+  const { data: profile, loading: profileLoading, error: profileError, refetch: refetchProfile } = useApi(getMyProfile, [], true);
+  const [passwords, setPasswords] = useState({ old: '', next: '' });
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState<'researcher' | 'password' | null>(null);
+  const [providerState, setProviderState] = useState<Partial<Record<ProviderName, ProviderStatus>>>({});
+  const [providerLoading, setProviderLoading] = useState<ProviderName | null>(null);
+
+
+  const initialValues: ResearcherProfileFormValues = {
+    avatar: user?.avatar || '',
+    department: user?.department || '',
+    faculty: user?.faculty || '',
+    bio: profile?.bio || '',
+    orcid: profile?.orcid || '',
+    github: profile?.github || '',
+    website: profile?.website || '',
+    research_interests: normalizeResearchInterests(profile?.research_interests, user?.email),
+    is_available_for_mentoring: profile?.is_available_for_mentoring || false,
+  };
+
+  const saveResearcherProfile = async (values: ResearcherProfileFormValues) => {
+    if (!user) return;
+    setSaving('researcher');
+    try {
+      await updateUser({ avatar: values.avatar, department: values.department, faculty: values.faculty });
+      await updateMyProfile({ bio: values.bio, orcid: values.orcid, github: values.github, website: values.website, research_interests: normalizeResearchInterests(values.research_interests, user.email), is_available_for_mentoring: values.is_available_for_mentoring });
+      await refetchProfile();
+      setMessage('Researcher profile updated.');
+    } catch (error) {
+      setMessage(error instanceof ApiError ? error.detail : 'Unable to update researcher profile.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const savePassword = async () => {
+    setSaving('password'); setMessage('');
+    try {
+      await changePassword(passwords.old, passwords.next);
+      setPasswords({ old: '', next: '' });
+      setMessage('Password updated.');
+    } catch (error) {
+      setMessage(error instanceof ApiError ? error.detail : 'Unable to update password.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const linkProvider = async (provider: ProviderName) => {
+    setProviderLoading(provider); setMessage('');
+    try {
+      const status = await getProviderLink(provider);
+      setProviderState((current) => ({ ...current, [provider]: status }));
+      if (status.authorization_url) window.location.assign(status.authorization_url);
+    } catch (error) {
+      const detail = error instanceof ApiError ? error.detail : `Unable to connect ${providerLabels[provider]}.`;
+      setProviderState((current) => ({ ...current, [provider]: { provider, configured: false, detail } }));
+    } finally {
+      setProviderLoading(null);
+    }
+  };
+
+  if (profileLoading) return <AuthenticatedLayout title="Account Settings"><LoadingState label="Loading account settings…" /></AuthenticatedLayout>;
+  if (profileError || !profile || !user) return <AuthenticatedLayout title="Account Settings"><ErrorState message="Unable to load your researcher profile." onRetry={() => void refetchProfile()} /></AuthenticatedLayout>;
+
   return (
     <AuthenticatedLayout title="Account Settings">
-      <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-8">
-        <div className="w-full md:w-64 flex-shrink-0">
-          <nav className="space-y-1">
-            <button className="w-full flex items-center px-3 py-2 bg-emerald-50 text-[#00502F] font-medium rounded-md text-sm"><User className="w-4 h-4 mr-3"/> Profile Info</button>
-            <button className="w-full flex items-center px-3 py-2 text-slate-600 hover:bg-slate-50 font-medium rounded-md text-sm" onClick={() => navigate('privacy-settings')}><Shield className="w-4 h-4 mr-3"/> Privacy & Access</button>
-          </nav>
-        </div>
-        
-        <div className="flex-1 space-y-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Public Profile</h3>
-            <div className="flex items-center space-x-6 mb-6">
-              <div className="w-20 h-20 bg-[#00502F] rounded-full text-white flex items-center justify-center text-2xl font-bold">AO</div>
-              <Button variant="secondary" size="sm">Change Avatar</Button>
-            </div>
-            <form className="space-y-4 max-w-lg">
-              <Input label="Full Name" value="Adekunle Ojo" onChange={()=>{}}/>
-              <Input label="Department" value="Agricultural Engineering" disabled onChange={()=>{}}/>
-              <div className="flex flex-col space-y-1.5">
-                <label className="text-sm font-medium text-slate-700">Bio</label>
-                <textarea className="px-3 py-2 border border-slate-300 rounded-md h-24 text-sm resize-none" defaultValue="Passionate about leveraging machine learning..." />
-              </div>
-              <Button>Save Profile</Button>
-            </form>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Connected Accounts</h3>
-            <div className="space-y-4 max-w-lg">
-              <div className="flex justify-between items-center p-3 border border-slate-200 rounded">
-                <span className="text-sm font-medium flex items-center"><LinkIcon className="w-4 h-4 mr-2 text-slate-400"/> GitHub</span>
-                <Button variant="ghost" size="sm">Connect</Button>
-              </div>
-              <div className="flex justify-between items-center p-3 border border-slate-200 rounded">
-                <span className="text-sm font-medium flex items-center"><LinkIcon className="w-4 h-4 mr-2 text-[#00502F]"/> ORCID (0000-0002-...)</span>
-                <Button variant="ghost" size="sm" className="text-red-500">Disconnect</Button>
-              </div>
-            </div>
-          </Card>
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 md:flex-row">
+        <div className="w-full shrink-0 md:w-64"><nav className="space-y-1"><button className="flex w-full items-center rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-[#00502F]"><span className="mr-3 h-4 w-4 rounded-full bg-[#00502F]" /> Profile info</button><button className="flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50" onClick={() => navigate('privacy-settings')}><Shield className="mr-3 h-4 w-4" /> Privacy & access</button></nav></div>
+        <div className="min-w-0 flex-1 space-y-6">
+          {message && <p className="text-sm text-[#00502F]" role="status">{message}</p>}
+          <ResearcherProfileForm user={user} initialValues={initialValues} onSubmit={saveResearcherProfile} submitting={saving === 'researcher'} submitLabel="Save researcher profile" title="Account and researcher profile" description="Keep your account details and public researcher profile up to date." showAccountSummary />
+          <Card className="p-6"><h3 className="mb-4 text-lg font-bold text-slate-900">Change password</h3><div className="max-w-lg space-y-4"><Input label="Current password" type="password" value={passwords.old} onChange={(event) => setPasswords({ ...passwords, old: event.target.value })} /><Input label="New password" type="password" value={passwords.next} onChange={(event) => setPasswords({ ...passwords, next: event.target.value })} /><Button variant="secondary" disabled={saving === 'password' || !passwords.old || !passwords.next} onClick={() => void savePassword()}>{saving === 'password' ? 'Updating…' : 'Update password'}</Button></div></Card>
+          <Card className="p-6"><h3 className="mb-2 text-lg font-bold text-slate-900">Connected accounts</h3><p className="mb-4 text-sm text-slate-500">OAuth linking is controlled by backend environment configuration.</p><div className="space-y-3">{(['github', 'orcid'] as ProviderName[]).map((provider) => { const linked = provider === 'github' ? profile.github : profile.orcid; const state = providerState[provider]; return <div key={provider} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><LinkIcon className="h-4 w-4 text-slate-400" /><div><p className="text-sm font-medium text-slate-900">{providerLabels[provider]}</p><p className="text-xs text-slate-500">{linked ? `Linked: ${linked}` : state?.detail || 'Not linked'}</p></div></div>{linked ? <span className="inline-flex items-center text-xs font-semibold text-emerald-700"><CheckCircle2 className="mr-1 h-4 w-4" /> Connected</span> : <Button variant="secondary" size="sm" disabled={providerLoading === provider} onClick={() => void linkProvider(provider)}>{providerLoading === provider ? <><Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> Checking…</> : `Connect ${providerLabels[provider]}`}</Button>}</div>; })}</div></Card>
         </div>
       </div>
     </AuthenticatedLayout>

@@ -1,95 +1,46 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React from 'react';
+import { ExternalLink, Link as LinkIcon, MessageSquare, Pencil } from 'lucide-react';
+import { useAppRouter, Button, Card, Badge, AuthenticatedLayout } from '../components/shared';
+import { useApi } from '../hooks/useApi';
+import { ApiError, getMyProfile, getProfile } from '../lib/api';
+import { EmptyState, ErrorState, LoadingState, UnavailableState } from '../components/AsyncState';
+import { initials, parseResearchInterests, publicDisplayName } from '../lib/formatters';
 
 const Screen30ResearcherProfile = () => {
-  const { navigate } = useAppRouter();
+  const { navigate, currentScreen, user } = useAppRouter();
+  const userId = Number(currentScreen.params?.userId || currentScreen.params?.id || user?.id);
+  const isOwnProfile = Boolean(user?.id && user.id === userId);
+  const { data: profile, loading, error, refetch } = useApi(() => userId ? (isOwnProfile ? getMyProfile() : getProfile(userId)) : Promise.resolve(null), [userId, isOwnProfile], true);
+
+  if (!userId) return <AuthenticatedLayout title="Researcher Profile"><EmptyState title="No researcher selected" description="Open a profile from the researcher directory." /></AuthenticatedLayout>;
+  if (loading) return <AuthenticatedLayout title="Researcher Profile"><LoadingState label="Loading researcher profile…" /></AuthenticatedLayout>;
+  if (error || !profile) {
+    const message = error instanceof ApiError && error.status === 404 ? 'This user has not created a researcher profile yet.' : error instanceof ApiError ? error.detail : 'Unable to reach the backend.';
+    return <AuthenticatedLayout title="Researcher Profile"><ErrorState message={message} onRetry={() => void refetch()} /></AuthenticatedLayout>;
+  }
+
+  const name = publicDisplayName(profile.user.name, profile.user.display_name);
+  const interests = parseResearchInterests(profile.research_interests, profile.user.email);
   return (
     <AuthenticatedLayout title="Researcher Profile">
-      <div className="max-w-5xl mx-auto">
-        {/* Profile Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
-          <div className="h-32 bg-gradient-to-r from-[#00502F] to-[#003d24]"></div>
-          <div className="px-8 pb-8 relative">
-            <div className="w-24 h-24 rounded-full bg-white border-4 border-white shadow-md flex items-center justify-center text-3xl font-bold text-[#00502F] absolute -top-12">
-              AO
-            </div>
-            <div className="mt-16 flex flex-col md:flex-row justify-between items-start md:items-center">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900 flex items-center">Adekunle Ojo <Badge variant="green" className="ml-3">Alumni</Badge></h1>
-                <p className="text-slate-600 mt-1">B.Sc. Agricultural Engineering (2023)</p>
-                <div className="flex items-center space-x-4 mt-3 text-sm text-slate-500">
-                  <span className="flex items-center"><LinkIcon className="w-4 h-4 mr-1"/> GitHub</span>
-                  <span className="flex items-center"><LinkIcon className="w-4 h-4 mr-1"/> ORCID</span>
-                </div>
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="h-32 bg-gradient-to-r from-[#00502F] to-[#003d24]" />
+          <div className="relative px-6 pb-8 sm:px-8">
+            <div className="absolute -top-12 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white bg-white text-3xl font-bold text-[#00502F] shadow-md">{profile.user.avatar || initials(name)}</div>
+            <div className="mt-16 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+              <div className="min-w-0 pl-0 md:pl-28">
+                <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-bold text-slate-900">{name}</h1><Badge variant="green">{profile.user.role}</Badge></div>
+                <p className="mt-1 text-slate-600">{profile.user.department || 'Department not provided'}{profile.user.faculty ? ` · ${profile.user.faculty}` : ''}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">{profile.github && <a href={`https://github.com/${profile.github}`} target="_blank" rel="noreferrer" className="flex items-center hover:text-[#00502F]"><LinkIcon className="mr-1 h-4 w-4" /> GitHub</a>}{profile.orcid && <a href={profile.orcid} target="_blank" rel="noreferrer" className="flex items-center hover:text-[#00502F]"><LinkIcon className="mr-1 h-4 w-4" /> ORCID</a>}{profile.website && <a href={profile.website} target="_blank" rel="noreferrer" className="flex items-center hover:text-[#00502F]"><ExternalLink className="mr-1 h-4 w-4" /> Website</a>}</div>
               </div>
-              <div className="mt-4 md:mt-0 flex space-x-3">
-                <Button onClick={() => navigate('messages')}><MessageSquare className="w-4 h-4 mr-2"/> Message</Button>
-                <Button variant="secondary" onClick={() => navigate('mentorship-request')}>Request Mentorship</Button>
-              </div>
+              <div className="flex flex-wrap gap-3 md:mt-0">{isOwnProfile && <Button variant="secondary" onClick={() => navigate('account-settings', { section: 'researcher' })}><Pencil className="mr-2 h-4 w-4" /> Edit profile</Button>}<Button onClick={() => navigate('messages', { userId })}><MessageSquare className="mr-2 h-4 w-4" /> Message</Button>{!isOwnProfile && profile.is_available_for_mentoring && <Button variant="secondary" onClick={() => navigate('mentorship-request', { userId })}>Request mentorship</Button>}</div>
             </div>
           </div>
         </div>
-
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="flex-1 space-y-8">
-            <Card className="p-6">
-              <h3 className="text-lg font-bold text-slate-900 mb-3">About</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Passionate about leveraging machine learning to solve agricultural challenges in Sub-Saharan Africa. Currently working as a Data Analyst, open to academic collaborations and mentoring current undergraduates in the Agric Engineering department.
-              </p>
-            </Card>
-            
-            <div>
-              <div className="flex justify-between items-end mb-4">
-                <h3 className="text-lg font-bold text-slate-900">Published Research</h3>
-                <button className="text-sm text-[#00502F] hover:underline" onClick={() => navigate('researcher-activity')}>View Timeline</button>
-              </div>
-              <div className="space-y-4">
-                <ThesisCard thesis={MOCK_THESES[0]} onClick={() => navigate('thesis-detail')} />
-              </div>
-            </div>
-          </div>
-          
-          <div className="w-full lg:w-80 space-y-6">
-            <Card className="p-6">
-              <h3 className="font-bold text-slate-900 mb-4">Research Interests</h3>
-              <div className="flex flex-wrap gap-2">
-                {['Machine Learning', 'Precision Agriculture', 'Data Science', 'Python', 'GIS'].map(tag => (
-                  <Badge key={tag} variant="gray">{tag}</Badge>
-                ))}
-              </div>
-            </Card>
-            <Card className="p-6">
-              <h3 className="font-bold text-slate-900 mb-4 text-center">Impact Stats</h3>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <span className="block text-2xl font-bold text-[#00502F]">1.2k</span>
-                  <span className="text-xs text-slate-500 uppercase">Views</span>
-                </div>
-                <div>
-                  <span className="block text-2xl font-bold text-[#00502F]">45</span>
-                  <span className="text-xs text-slate-500 uppercase">Citations</span>
-                </div>
-              </div>
-            </Card>
-          </div>
+        <div className="flex flex-col gap-8 lg:flex-row">
+          <div className="flex-1 space-y-8"><Card className="p-6"><h3 className="mb-3 text-lg font-bold text-slate-900">About</h3><p className="text-sm leading-relaxed text-slate-600">{profile.bio || 'This researcher has not added a biography yet.'}</p></Card><UnavailableState title="Published research is not linked to profiles yet" description="The connected backend exposes profiles, but it does not expose a researcher-owned thesis listing endpoint." /></div>
+          <div className="w-full space-y-6 lg:w-80"><Card className="p-6"><h3 className="mb-4 font-bold text-slate-900">Research interests</h3><div className="flex flex-wrap gap-2">{interests.length > 0 ? interests.map((tag) => <Badge key={tag} variant="gray">{tag}</Badge>) : <span className="text-sm text-slate-500">No interests added yet.</span>}</div></Card><Card className="p-6"><h3 className="mb-3 font-bold text-slate-900">Mentorship</h3><p className="text-sm text-slate-600">{profile.is_available_for_mentoring ? 'Available for mentorship requests.' : 'Not currently accepting mentorship requests.'}</p></Card></div>
         </div>
       </div>
     </AuthenticatedLayout>

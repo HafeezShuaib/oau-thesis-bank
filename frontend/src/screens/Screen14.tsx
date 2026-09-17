@@ -1,40 +1,29 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useRef, useState } from 'react';
+import { FileUp } from 'lucide-react';
+import { useAppRouter, Button, Card, AuthenticatedLayout, UploadWizardNav } from '../components/shared';
+import { useUpload } from '../context/UploadContext';
+import { formatFileSize } from '../lib/formatters';
+
+const MAX_PDF_SIZE = 10 * 1024 * 1024;
 
 const Screen14Upload = () => {
   const { navigate } = useAppRouter();
-  return (
-    <AuthenticatedLayout title="Upload Research">
-      <div className="max-w-3xl mx-auto">
-        <UploadWizardNav step={1} />
-        <Card className="p-12 text-center border-dashed border-2 border-slate-300 hover:border-[#00502F] transition-colors bg-slate-50">
-          <FileUp className="w-16 h-16 mx-auto text-slate-400 mb-4" />
-          <h3 className="text-xl font-semibold text-slate-900 mb-2">Drag and drop your thesis document</h3>
-          <p className="text-slate-500 mb-6">Supported formats: PDF, DOCX (Max 50MB)</p>
-          <div className="flex justify-center space-x-4">
-            <Button onClick={() => navigate('thesis-metadata')}>Browse Files</Button>
-          </div>
-        </Card>
-      </div>
-    </AuthenticatedLayout>
-  );
+  const { file, setFile } = useUpload();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  const [dragging, setDragging] = useState(false);
+
+  const chooseFile = (nextFile: File | undefined) => {
+    if (!nextFile) return;
+    const isPdf = nextFile.type === 'application/pdf' || nextFile.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) { setError('Only PDF files are allowed.'); return; }
+    if (nextFile.size > MAX_PDF_SIZE) { setError('PDF must be 10 MB or smaller.'); return; }
+    setError('');
+    setFile(nextFile);
+    navigate('thesis-metadata');
+  };
+
+  return <AuthenticatedLayout title="Upload Research"><div className="mx-auto max-w-3xl"><UploadWizardNav step={1} /><Card className={`border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${dragging ? 'border-[#00502F] bg-emerald-50' : 'border-slate-300 bg-slate-50 hover:border-[#00502F]'}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files?.[0]); }}><FileUp className="mx-auto mb-4 h-16 w-16 text-slate-400" /><h3 className="mb-2 text-xl font-semibold text-slate-900">Upload your thesis document</h3><p className="mb-6 text-slate-500">PDF only, up to 10 MB. Drop a file here or browse your device.</p><input ref={inputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(event) => chooseFile(event.target.files?.[0])} /><Button onClick={() => inputRef.current?.click()}>Browse files</Button>{file && <p className="mt-5 text-sm font-medium text-[#00502F]">Selected: {file.name} · {formatFileSize(file.size)}</p>}{error && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}</Card></div></AuthenticatedLayout>;
 };
 
 export default Screen14Upload;

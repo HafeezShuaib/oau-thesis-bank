@@ -47,32 +47,36 @@ import Screen42 from './screens/Screen42';
 import Screen43 from './screens/Screen43';
 import Screen44 from './screens/Screen44';
 import Screen45 from './screens/Screen45';
+import Screen47 from './screens/Screen47';
 
 export default function App() {
-  const { currentScreen, user, navigate } = useAppRouter();
-  const adminScreen = currentScreen.id === 'admin-dashboard' || currentScreen.id === 'content-moderation' || currentScreen.id === 'user-management';
-  const protectedScreen = !['landing', 'login', 'signup', 'password-reset', 'screen-index'].includes(currentScreen.id);
+  const { currentScreen, user, navigate, authLoading } = useAppRouter();
+  const screenId = currentScreen.id === 'landing' && user ? 'discover' : currentScreen.id;
+  const adminScreen = screenId === 'admin-dashboard' || screenId === 'content-moderation' || screenId === 'user-management';
+  const publicScreens = ['landing', 'login', 'signup', 'password-reset', 'screen-index', 'discover', 'search-results', 'advanced-search', 'thesis-detail', 'pdf-reader'];
+  const protectedScreen = !publicScreens.includes(screenId);
 
   React.useEffect(() => {
+    if (authLoading) return;
     if (adminScreen && user?.role !== 'admin') {
       navigate(user ? 'discover' : 'login');
     } else if (protectedScreen && !user) {
       navigate('login');
     }
-  }, [adminScreen, protectedScreen, user, navigate]);
+  }, [adminScreen, authLoading, protectedScreen, user, navigate]);
 
-  if ((adminScreen && user?.role !== 'admin') || (protectedScreen && !user)) return null;
+  if (authLoading || (adminScreen && user?.role !== 'admin') || (protectedScreen && !user)) return null;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={currentScreen.id}
+        key={screenId}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } }}
         exit={{ opacity: 0, y: -10, transition: { duration: 0.2 } }}
         className="w-full min-h-screen"
       >
-        {renderScreen(currentScreen.id)}
+        {renderScreen(screenId)}
       </motion.div>
     </AnimatePresence>
   );
@@ -126,6 +130,8 @@ function renderScreen(id: string) {
       case 'admin-dashboard': return <Screen43 />;
       case 'content-moderation': return <Screen44 />;
       case 'user-management': return <Screen45 />;
+      case 'collaboration-requests': return <Screen32 />;
+      case 'profile-setup': return <Screen47 />;
       default: return <Screen01 />;
   }
 }

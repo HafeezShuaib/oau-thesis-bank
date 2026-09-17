@@ -1,63 +1,33 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Search, BookOpen, Users, Cpu, FileText, ChevronRight, Lock, Unlock, Mail, Settings,
-  LogOut, Bell, MessageSquare, Activity, BarChart2, PlusCircle, CheckCircle, AlertTriangle,
-  Download, Bookmark, Share2, Filter, MoreVertical, X, Menu, Home, Grid, Lightbulb,
-  FileSearch, UserPlus, Shield, Check, FileUp, Database, GitBranch, ArrowRight, ArrowLeft,
-  MessageCircle, Link as LinkIcon, ThumbsUp, Send, PieChart, TrendingUp, Search as SearchIcon,
-  ShieldAlert, Settings2, Sliders, ChevronDown, Book, User, Calendar
-} from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RePieChart, Pie, Cell, AreaChart, Area
-} from 'recharts';
-import {
-  theme, MOCK_THESES, MOCK_USERS, MOCK_MESSAGES, useAppRouter,
-  Button, Input, Card, Badge, PublicLayout, AuthenticatedLayout, AuthContainer,
-  ThesisCard, UploadWizardNav, pageVariants, listVariants, itemVariants
-} from '../components/shared';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { useAppRouter, AuthenticatedLayout, Card, Button, UploadWizardNav } from '../components/shared';
+import { useUpload } from '../context/UploadContext';
+import { apiErrorMessage, createThesis } from '../lib/api';
 
 const Screen17AIProcessing = () => {
   const { navigate } = useAppRouter();
-  const [progress, setProgress] = useState(0);
+  const { file, draft, setSubmittedThesisId } = useUpload();
+  const [error, setError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress(p => {
-        if (p >= 100) {
-          clearInterval(timer);
-          setTimeout(() => navigate('publish-confirmation'), 1000);
-          return 100;
-        }
-        return p + 10;
-      });
-    }, 400);
-    return () => clearInterval(timer);
-  }, [navigate]);
+    if (!file || submitted) return;
+    const form = new FormData();
+    if (draft.title) form.append('title', draft.title);
+    if (draft.author) form.append('author', draft.author);
+    if (draft.department) form.append('department', draft.department);
+    if (draft.faculty) form.append('faculty', draft.faculty);
+    if (draft.supervisor) form.append('supervisor', draft.supervisor);
+    if (draft.abstract) form.append('abstract', draft.abstract);
+    if (draft.year) form.append('year', String(draft.year));
+    form.append('access_policy', draft.access_policy || 'public');
+    (draft.tags || []).forEach((tag) => form.append('tags', tag));
+    form.append('file', file);
+    setError('');
+    createThesis(form).then((thesis) => { setSubmittedThesisId(thesis.id); setSubmitted(true); navigate('publish-confirmation', { thesisId: thesis.id }); }).catch((nextError) => setError(apiErrorMessage(nextError, 'Unable to submit this thesis.')));
+  }, [draft, file, navigate, setSubmittedThesisId, submitted]);
 
-  return (
-    <AuthenticatedLayout title="Processing Document">
-      <div className="max-w-3xl mx-auto text-center mt-20">
-        <UploadWizardNav step={4} />
-        <div className="mb-8">
-          <div className="w-24 h-24 mx-auto border-4 border-slate-100 border-t-[#00502F] rounded-full animate-spin"></div>
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">AI is analyzing your thesis...</h2>
-        <p className="text-slate-500 mb-8">Extracting semantic meaning, building search indexes, and generating summaries.</p>
-        
-        <div className="max-w-md mx-auto bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-          <motion.div className="h-full bg-[#00502F]" initial={{ width: 0 }} animate={{ width: `${progress}%` }} />
-        </div>
-        
-        <div className="space-y-3 text-sm text-left max-w-md mx-auto bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center text-emerald-700"><CheckCircle className="w-4 h-4 mr-2"/> Text Extraction Complete</div>
-          <div className={`flex items-center ${progress > 30 ? 'text-emerald-700' : 'text-slate-400'}`}>{progress > 30 ? <CheckCircle className="w-4 h-4 mr-2"/> : <div className="w-4 h-4 mr-2 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin"/>} Generating Abstract Summary</div>
-          <div className={`flex items-center ${progress > 70 ? 'text-emerald-700' : 'text-slate-400'}`}>{progress > 70 ? <CheckCircle className="w-4 h-4 mr-2"/> : <div className="w-2 h-2 rounded-full bg-slate-300 mr-4 ml-1"/>} Building Semantic Vectors</div>
-        </div>
-      </div>
-    </AuthenticatedLayout>
-  );
+  return <AuthenticatedLayout title="Processing Document"><div className="mx-auto mt-20 max-w-3xl text-center"><UploadWizardNav step={4} />{error ? <Card className="p-8"><AlertTriangle className="mx-auto h-10 w-10 text-red-500" /><h2 className="mt-4 text-2xl font-bold text-slate-900">Submission failed</h2><p className="mt-2 text-sm text-slate-500">{error}</p><Button className="mt-6" onClick={() => navigate('access-privacy')}>Review and try again</Button></Card> : <><div className="mb-8"><Loader2 className="mx-auto h-20 w-20 animate-spin text-[#00502F]" /></div><h2 className="mb-2 text-2xl font-bold text-slate-900">Submitting your thesis…</h2><p className="mb-8 text-slate-500">The connected backend is storing the PDF and starting its processing workflow.</p><div className="mx-auto max-w-md space-y-3 rounded-lg border border-slate-200 bg-white p-6 text-left text-sm shadow-sm"><div className="flex items-center text-emerald-700"><CheckCircle className="mr-2 h-4 w-4" /> Metadata prepared</div><div className="flex items-center text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending PDF to Django</div><div className="flex items-center text-slate-400"><span className="ml-1 mr-4 h-2 w-2 rounded-full bg-slate-300" /> Waiting for backend processing status</div></div></>}</div></AuthenticatedLayout>;
 };
 
 export default Screen17AIProcessing;
