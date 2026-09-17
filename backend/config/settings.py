@@ -178,12 +178,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
-# CORS — allow the Vite dev server on the supported local ports.
+# CORS — allow the Vite dev server.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:5174",
-    "http://127.0.0.1:5174",
 ]
 
 SPECTACULAR_SETTINGS = {
