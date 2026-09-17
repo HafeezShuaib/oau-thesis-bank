@@ -10,7 +10,7 @@ npm run dev
 npm run build
 ```
 
-The Vite development server runs on `http://localhost:5174` and talks to `http://127.0.0.1:8000/api` by default. Copy `.env.example` to `.env.local` to change `VITE_API_BASE_URL`.
+The Vite development server runs on `http://localhost:5173` and talks to `http://127.0.0.1:8000/api` by default. Copy `.env.example` to `.env.local` to change `VITE_API_BASE_URL`.
 
 ## Connected capabilities
 
@@ -21,4 +21,4 @@ The Vite development server runs on `http://localhost:5174` and talks to `http:/
 
 ## Backend
 
-Start Django from `../backend` and ensure PostgreSQL is running. The backend must allow the clone origin `http://localhost:5174` or `http://127.0.0.1:5174` through `CORS_ALLOWED_ORIGINS`.
+Start Django from `../backend` and ensure PostgreSQL is running. The backend allows the frontend origins `http://localhost:5173` and `http://127.0.0.1:5173` through `CORS_ALLOWED_ORIGINS`.
