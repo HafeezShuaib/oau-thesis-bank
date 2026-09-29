@@ -1,0 +1,10 @@
+# Input Guardrail: Prevent Jailbreaks / Prompt Injection
+define flow check jailbreak
+  user intent "jailbreak"
+  bot refuse to answer
+
+# Output Guardrail: Prevent Hallucinations
+define flow check hallucination
+  bot said "..."
+  if $bot_message not grounded in context
+    bot say "I apologize, but I cannot verify that information from the provided thesis documents."

@@ -1,0 +1,50 @@
+# ── Secrets / environment ─────────────────────────────────────────────────
+.env
+*.env.local
+*.pem
+*.key
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# ── Testing / coverage ─────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Models & large artifacts (fetched at runtime / stored in a registry) ──
+models/**/*.bin
+models/**/*.safetensors
+models/**/*.pt
+models/**/*.onnx
+!models/**/.gitkeep
+
+# ── Data (never commit real theses, PII, or raw training data) ───────────
+data/**
+!data/**/.gitkeep
+!data/README.md
+
+# ── Logs / telemetry dumps ─────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS / editor ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Docker ──────────────────────────────────────────────────────────────────
+*.pid

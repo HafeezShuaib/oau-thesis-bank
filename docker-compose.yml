@@ -1,0 +1,18 @@
+services:
+  ai-intelligence:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: oau_ai_intelligence
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://oau_user:password123@phase3_postgres:5432/oau_thesis_bank
+    depends_on:
+      - phase3_postgres
+    networks:
+      - oau_network
+    restart: unless-stopped
+networks:
+  oau_network:
+    driver: bridge

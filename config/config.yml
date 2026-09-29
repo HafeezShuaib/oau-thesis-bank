@@ -1,0 +1,14 @@
+models:
+  - type: main
+    engine: openai
+    model: qwen2.5-vl-7b-instruct
+    base_url: http://localhost:1234/v1
+    api_key: lm-studio
+
+rails:
+  input:
+    flows:
+      - self check jailbreak
+  output:
+    flows:
+      - self check output moderation
