@@ -57,10 +57,11 @@ All settings have sane dev defaults — override via environment variables in `d
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | comma-separated |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `oau_thesis_bank` / `oau` / `oau` | database |
 | `POSTGRES_HOST` / `POSTGRES_PORT` | `db` / `5432` | database connection |
-| `STORAGE_PROVIDER` | `minio` | `minio`, `s3`, or `r2` (Cloudflare R2 for prod) |
-| `AWS_S3_ENDPOINT_URL` | `http://minio:9000` | S3 endpoint |
-| `AWS_S3_ACCESS_KEY_ID` / `AWS_S3_SECRET_ACCESS_KEY` | `oau` / `oau-thesis-secret` | object store credentials |
-| `AWS_STORAGE_BUCKET_NAME` | `oau-thesis-bank` | bucket (MinIO: auto-created by `minio-init`) |
+| `STORAGE_PROVIDER` | `local` | `local`, `minio`, or `r2` (Cloudflare R2 for prod) |
+| `STORAGE_ENDPOINT_URL` | `http://minio:9000` | `http://<ACCOUNT_ID>.r2.cloudflarestorage.com` for R2 |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | `oau` / `oau-thesis-secret` | object store credentials |
+| `STORAGE_BUCKET_NAME` | `oau-thesis-bank` | bucket (MinIO: auto-created by `minio-init`) |
+| `STORAGE_REGION` | `auto` (R2) / `us-east-1` (MinIO) | leave blank for the provider default |
 | `EMAIL_BACKEND` | console | `django.core.mail.backends.console.EmailBackend` in dev |
 | `EMAIL_NOTIFICATIONS_ENABLED` | off | set `1` to fan out notifications by email |
 

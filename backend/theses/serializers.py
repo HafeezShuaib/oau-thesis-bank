@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.urls import reverse
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import AccessRequest, SavedThesis, Tag, Thesis
@@ -31,6 +33,7 @@ class ThesisSerializer(serializers.ModelSerializer):
     tags = TagField()
     author = serializers.CharField(max_length=150, required=False)
     owner = serializers.PrimaryKeyRelatedField(read_only=True)
+    file_url = serializers.SerializerMethodField()
     saved = serializers.SerializerMethodField()
     access_requests_count = serializers.SerializerMethodField()
 
@@ -50,6 +53,7 @@ class ThesisSerializer(serializers.ModelSerializer):
             "status",
             "access_policy",
             "file",
+            "file_url",
             "processing_status",
             "views",
             "downloads",
@@ -59,6 +63,22 @@ class ThesisSerializer(serializers.ModelSerializer):
             "access_requests_count",
         )
         read_only_fields = ("created_at", "updated_at", "processing_status", "views", "downloads")
+        # write_only keeps the model validators (extension/PDF/size) in place
+        # while stopping the stored object from being serialized back out.
+        extra_kwargs = {"file": {"write_only": True}}
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_file_url(self, obj):
+        """Point at the download endpoint instead of the stored object.
+
+        Serializing the FileField would hand out a presigned object-storage URL,
+        which grants direct access for an hour and so bypasses the access-policy
+        check, the download counter, and any later revocation. The relative
+        path keeps the file behind the same checks as any other download.
+        """
+        if not obj.file:
+            return None
+        return reverse("thesis-download", args=[obj.pk])
 
     def get_saved(self, obj):
         request = self.context.get("request")
