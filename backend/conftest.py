@@ -7,6 +7,22 @@ from theses.models import Tag, Thesis
 PASSWORD = "test-password-123"
 
 
+@pytest.fixture(autouse=True)
+def local_media_root(settings, tmp_path_factory):
+    """Keep uploads on a temporary filesystem.
+
+    `.env` may point the default storage at MinIO or R2, but the test suite
+    must not depend on a running object store.
+    """
+    media_root = tmp_path_factory.mktemp("media")
+    settings.STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+    settings.MEDIA_ROOT = media_root
+    return media_root
+
+
 @pytest.fixture
 def password():
     return PASSWORD

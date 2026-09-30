@@ -37,7 +37,8 @@ export interface Thesis {
   tags: string[];
   status: ThesisStatus;
   access_policy: AccessPolicy;
-  file: string | null;
+  /** Relative path to the download endpoint; null when no PDF is attached. */
+  file_url: string | null;
   processing_status: ProcessingStatus;
   created_at: string;
   updated_at: string;
