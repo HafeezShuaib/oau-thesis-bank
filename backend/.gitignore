@@ -1,0 +1,18 @@
+# Local env / secrets
+.env
+
+# Local port overrides (untracked by design)
+docker-compose.override.yml
+
+# uv virtualenv (masked by an anonymous volume in Docker)
+.venv/
+
+# Uploaded files (S3/MinIO in practice; local fallback only)
+media/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# uv.lock is committed — the Dockerfile installs with --frozen.
