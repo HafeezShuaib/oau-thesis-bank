@@ -133,6 +133,52 @@ def test_access_request_public_thesis_rejected(make_thesis, researcher, student,
     assert api_client.post("/api/theses/access-requests/", {"thesis": thesis.id}).status_code == 400
 
 
+def test_file_url_points_at_the_download_endpoint(auth_client, user, make_thesis):
+    """Never expose the object-storage URL — it bypasses access policy."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    thesis = make_thesis(owner=user, status=Thesis.Status.PUBLISHED)
+    thesis.file = SimpleUploadedFile("thesis.pdf", b"%PDF-1.4 fake pdf", content_type="application/pdf")
+    thesis.save()
+    response = auth_client.get(f"/api/theses/{thesis.id}/")
+    assert response.status_code == 200
+    file_url = response.data["file_url"]
+    assert file_url == f"/api/theses/{thesis.id}/download/"
+    assert "X-Amz" not in file_url
+    assert "http" not in file_url
+
+
+def test_file_field_is_write_only(auth_client, user, make_thesis):
+    """The storage field stays out of responses, including on a 400."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    thesis = make_thesis(owner=user, status=Thesis.Status.PUBLISHED)
+    thesis.file = SimpleUploadedFile("thesis.pdf", b"%PDF-1.4 fake pdf", content_type="application/pdf")
+    thesis.save()
+    assert "file" not in auth_client.get(f"/api/theses/{thesis.id}/").data
+
+
+def test_file_url_is_null_without_a_pdf(auth_client, your_thesis):
+    response = auth_client.get(f"/api/theses/{your_thesis.id}/")
+    assert response.data["file_url"] is None
+
+
+def test_restricted_thesis_leaks_no_storage_url(api_client, make_thesis, researcher):
+    """A thesis you cannot download must not hand out a signed URL either."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    thesis = make_thesis(
+        owner=researcher,
+        status=Thesis.Status.PUBLISHED,
+        access_policy=Thesis.AccessPolicy.RESTRICTED,
+    )
+    thesis.file = SimpleUploadedFile("thesis.pdf", b"%PDF-1.4 fake pdf", content_type="application/pdf")
+    thesis.save()
+    assert api_client.get(f"/api/theses/{thesis.id}/download/").status_code == 403
+    serialized = str(api_client.get("/api/theses/").data)
+    assert "X-Amz-Signature" not in serialized
+
+
 def test_download_requires_ownership_permission(auth_client, user, make_thesis):
     from django.core.files.uploadedfile import SimpleUploadedFile
 

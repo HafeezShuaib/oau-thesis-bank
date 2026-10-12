@@ -1,9 +1,12 @@
-﻿node_modules/
+node_modules/
 .venv/
 venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .env
 dist/
 build/
 .vscode/
+media/
+docker-compose.override.yml

@@ -2,23 +2,44 @@
 Django settings for the OAU Thesis Bank backend.
 
 PostgreSQL only. Credentials come from environment variables with defaults
-that match the repo's docker-compose.yml.
+that match the repo's docker-compose.yml. A local `backend/.env` is loaded when
+present; real environment variables (e.g. from docker compose) take priority.
 """
 
 import os
 from datetime import timedelta
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+from config.storage import build_storages
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Local dev/prod secrets. override=False keeps process env authoritative.
+load_dotenv(BASE_DIR / ".env")
+
+
+def env(name, default=None):
+    """Read an environment variable, treating a blank value as unset.
+
+    .env files are templates with blank placeholders, so an empty
+    ``DJANGO_SECRET_KEY=`` must fall back to the default rather than
+    configuring Django with an empty string.
+    """
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip()
+
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-17k=jrztl%t^kv(g)hk2t=^6!h8a525s6!3*97js())rtm0(9w")
+SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-17k=jrztl%t^kv(g)hk2t=^6!h8a525s6!3*97js())rtm0(9w")
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+DEBUG = env("DJANGO_DEBUG", "1") == "1"
 
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
 # Application definition
@@ -86,11 +107,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "oau_thesis_bank"),
-        "USER": os.environ.get("POSTGRES_USER", "oau"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "oau"),
-        "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        "NAME": env("POSTGRES_DB", "oau_thesis_bank"),
+        "USER": env("POSTGRES_USER", "oau"),
+        "PASSWORD": env("POSTGRES_PASSWORD", "oau"),
+        "HOST": env("POSTGRES_HOST", "127.0.0.1"),
+        "PORT": env("POSTGRES_PORT", "5432"),
     }
 }
 
@@ -117,45 +138,24 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 # Email — console in dev, swap to SMTP in production via env.
-EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "") == "1"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@oau-thesis-bank.local")
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(env("EMAIL_PORT", "1025"))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env("EMAIL_USE_TLS", "") == "1"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@oau-thesis-bank.local")
 
 # Fan out notification emails only when explicitly enabled.
-EMAIL_NOTIFICATIONS_ENABLED = os.environ.get("EMAIL_NOTIFICATIONS_ENABLED", "") == "1"
+EMAIL_NOTIFICATIONS_ENABLED = env("EMAIL_NOTIFICATIONS_ENABLED", "") == "1"
 
 # Uploaded thesis files (PDFs)
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Object storage — S3-compatible. MinIO for local dev, Cloudflare R2 in prod.
-# Both speak the S3 API, so switching is purely configuration.
-STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
-if STORAGE_PROVIDER in ("minio", "s3", "r2"):
-    STORAGES = {
-        "default": {
-            "BACKEND": "storages.backends.s3.S3Storage",
-            "OPTIONS": {
-                "endpoint_url": os.environ.get("AWS_S3_ENDPOINT_URL"),
-                "access_key": os.environ.get("AWS_S3_ACCESS_KEY_ID"),
-                "secret_key": os.environ.get("AWS_S3_SECRET_ACCESS_KEY"),
-                "bucket_name": os.environ.get("AWS_STORAGE_BUCKET_NAME", "oau-thesis-bank"),
-                "default_acl": "private",
-                "querystring_auth": True,
-                "file_overwrite": False,
-            },
-        },
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    }
-else:
-    STORAGES = {
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    }
+# Object storage — see config/storage.py. Local filesystem, MinIO or
+# Cloudflare R2 depending on STORAGE_PROVIDER and the STORAGE_* variables.
+STORAGES = build_storages()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

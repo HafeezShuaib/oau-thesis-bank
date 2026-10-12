@@ -8,4 +8,8 @@ media/
 .gitattributes
 Dockerfile
 docker-compose.yml
+docker-compose.override.yml
+# Secrets — never bake credentials into an image.
+.env
+*.env
 README.md
