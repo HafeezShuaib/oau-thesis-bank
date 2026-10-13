@@ -1,5 +1,5 @@
 from django.contrib.postgres.search import SearchVector
-from django.db.models.signals import m2m_changed, post_save
+from django.db.models.signals import m2m_changed, post_save, pre_delete
 from django.dispatch import receiver
 
 from .models import Thesis
@@ -27,3 +27,10 @@ def _on_thesis_saved(sender, instance, **kwargs):
 def _on_thesis_tags_changed(sender, instance, action, **kwargs):
     if action in ("post_add", "post_remove", "post_clear"):
         _reindex_search(instance)
+
+
+@receiver(pre_delete, sender=Thesis)
+def _on_thesis_deleted(sender, instance, **kwargs):
+    """Remove the stored PDF so deleting a thesis never orphans its object."""
+    if instance.file:
+        instance.file.delete(save=False)

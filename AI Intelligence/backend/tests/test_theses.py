@@ -75,6 +75,21 @@ def test_owner_can_update(your_thesis, auth_client):
     assert response.data["title"] == "Updated Title"
 
 
+def test_deleting_thesis_removes_stored_file(auth_client, user, make_thesis):
+    """Deleting a thesis must not orphan its PDF in storage."""
+    from django.core.files.storage import default_storage
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    thesis = make_thesis(owner=user, status=Thesis.Status.PUBLISHED)
+    thesis.file = SimpleUploadedFile("thesis.pdf", b"%PDF-1.4 fake pdf", content_type="application/pdf")
+    thesis.save()
+    stored_name = thesis.file.name
+    assert default_storage.exists(stored_name)
+
+    assert auth_client.delete(f"/api/theses/{thesis.id}/").status_code == 204
+    assert not default_storage.exists(stored_name)
+
+
 def test_admin_can_update_any(published_thesis, admin_client):
     response = admin_client.patch(f"/api/theses/{published_thesis.id}/", {"title": "Admin Edit"}, format="json")
     assert response.status_code == 200
